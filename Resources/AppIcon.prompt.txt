@@ -1,0 +1,7 @@
+Generator: built-in image_gen (edit, transparent background)
+Asset: Resources/AppIcon.png
+
+Use case: precise-object-edit
+Asset type: production macOS app icon, FocusTrace.
+Input image 1 is the edit target. Make one subtle refinement: add a delicate softly reflective silver-gray bevel highlight to the OUTER PERIMETER of the dark rounded-square tile. Very fine rim, approximately 2–4 pixels wide on a 1024px canvas, catching gentle light most clearly on the upper and left edges and fading softly on the other edges. Quiet premium black-and-white macOS icon finish; understated, no sparkles or star shapes, no glow halo, no thick chrome frame, no dramatic 3D.
+Preserve the current black-and-white palette, dark tile interior, white open circular ring and separate upper-right dot exactly as they are: same position, geometry, stroke, gap and scale. Preserve tile shape and overall composition with equal transparent outside margin. No added objects, words, colors, or background. Single finished icon, not a mockup. Keep genuine alpha transparency outside the tile.

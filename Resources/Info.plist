@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>local.jinwoo.FocusTrace</string>
+<key>CFBundleName</key><string>FocusTrace</string>
+<key>CFBundleDisplayName</key><string>FocusTrace</string>
+<key>CFBundleExecutable</key><string>FocusTrace</string>
+<key>CFBundleIconFile</key><string>AppIcon.icns</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.2.0</string>
+<key>CFBundleVersion</key><string>15</string>
+<key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSAppleEventsUsageDescription</key><string>FocusTrace checks the active tab to measure visits to websites you choose. Visit times stay on this Mac. Full URLs and page contents are not saved.</string>
+</dict></plist>

@@ -1,0 +1,18 @@
+# SwiftPM and local build outputs
+.build/
+.swiftpm/
+dist/
+Resources/AppIcon.icns
+
+# macOS and Xcode user state
+.DS_Store
+xcuserdata/
+*.xcuserstate
+
+# Local configuration and exported tracking data
+.env
+.env.*
+!.env.example
+FocusTrace.csv
+visits.json
+sources.json
