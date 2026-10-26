@@ -6,6 +6,7 @@ import TrackingCore
 @MainActor final class Tracker: ObservableObject {
     static let shared = Tracker()
     @Published private(set) var ledger = Ledger()
+    @Published private(set) var coverage = RecordingCoverage()
     @Published private(set) var sources = Source.defaults
     @Published private(set) var running = false
     @Published private(set) var status = "Starting"
@@ -44,6 +45,7 @@ import TrackingCore
         idleMinutes = defaults.object(forKey: "idleMinutes") == nil ? 5 : defaults.integer(forKey: "idleMinutes")
         do {
             ledger = Ledger(visits: try store.loadVisits())
+            coverage = try store.loadCoverage()
             sources = try store.loadSources()
             try store.saveSources(sources)
         } catch {
@@ -123,6 +125,7 @@ import TrackingCore
     private func tick() {
         guard running, !suspended, storageError == nil else { return }
         let now = Date()
+        coverage.observe(at: now)
         guard !isIdle else {
             generation += 1
             ledger.stop(at: now); status = "Idle"
@@ -209,6 +212,7 @@ import TrackingCore
         guard storageError == nil else { return }
         do {
             try store.saveVisits(ledger.visits)
+            try store.saveCoverage(coverage)
             lastSave = Date()
         } catch {
             running = false

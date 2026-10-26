@@ -34,12 +34,12 @@ struct VisitDetail: View {
                 DialogCloseButton(action: dismiss)
             }
             VStack(alignment: .leading, spacing: 16) {
-                Text(dayLabel(day.start)).font(AppType.label).foregroundStyle(.secondary)
+                Text(intervalLabel).font(AppType.label).foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 20) {
                     UsageMetric(title: "Time spent", value: timeLabel(stats.seconds), caption: "\(shareLabel(item?.timeShare ?? 0)) of time in this view", compact: true)
                     UsageMetric(title: "Visits", value: "\(stats.visits)", caption: visits.contains(where: { $0.start < day.start }) ? "Excludes visits started earlier" : "", compact: true)
                     UsageMetric(title: "Longest visit", value: timeLabel(longest), caption: "", compact: true)
-                        .help("The longest recorded visit, counting only time within this day.")
+                        .help("The longest recorded visit, counting only time within the selected period.")
                 }
                 if stats.shortVisits > 0 {
                     Text("Quick checks · \(stats.shortVisits) of \(stats.visits) visits (30s or less)")
@@ -48,7 +48,7 @@ struct VisitDetail: View {
             }
             Divider()
             if visits.isEmpty {
-                Text("No visits recorded for this day.").font(.callout).foregroundStyle(.secondary)
+                Text("No visits recorded for this period.").font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 24)
             } else {
                 ScrollView {
@@ -93,12 +93,12 @@ struct VisitDetail: View {
         return HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text("\(clockLabel(max(visit.start, day.start))) – \(isActive ? "Now" : clockLabel(min(visit.end, day.end)))")
+                    Text("\(visitDatePrefix(visit))\(clockLabel(max(visit.start, day.start))) – \(isActive ? "Now" : clockLabel(min(visit.end, day.end)))")
                         .font(AppType.label).monospacedDigit()
                     if isActive { Circle().fill(.green).frame(width: 5, height: 5) }
                 }
                 if carriedOver || continues {
-                    Text(carriedOver ? "Continued from previous day" : "Continues into next day")
+                    Text(carriedOver ? "Started before this period" : "Continues after this period")
                         .font(AppType.caption).foregroundStyle(.secondary)
                 } else if quick || isLongest {
                     Text(quick ? "Quick check" : "Longest visit")
@@ -114,5 +114,21 @@ struct VisitDetail: View {
         }.frame(height: AppLayout.rowHeight)
             .help("\(visit.start.formatted(date: .abbreviated, time: .standard)) – \(visit.end.formatted(date: .abbreviated, time: .standard))")
             .accessibilityElement(children: .combine)
+    }
+
+    private var intervalLabel: String {
+        let last = max(day.start, day.end.addingTimeInterval(-1))
+        if Calendar.current.isDate(day.start, inSameDayAs: last) {
+            if day.start != Calendar.current.startOfDay(for: day.start) || (day.duration > 0 && day.duration <= 3600) {
+                return dayLabel(day.start) + " · " + day.start.formatted(date: .omitted, time: .shortened) + " – " + day.end.formatted(date: .omitted, time: .shortened)
+            }
+            return dayLabel(day.start)
+        }
+        return dayLabel(day.start) + " – " + dayLabel(last)
+    }
+
+    private func visitDatePrefix(_ visit: Visit) -> String {
+        guard !Calendar.current.isDate(day.start, inSameDayAs: max(day.start, day.end.addingTimeInterval(-1))) else { return "" }
+        return max(visit.start, day.start).formatted(.dateTime.month(.abbreviated).day().locale(Locale(identifier: "en_US"))) + " · "
     }
 }

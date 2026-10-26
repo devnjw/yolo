@@ -6,6 +6,7 @@ public struct TrackingStore {
     public let directory: URL
     public var visitsURL: URL { directory.appendingPathComponent("visits.json") }
     public var sourcesURL: URL { directory.appendingPathComponent("sources.json") }
+    public var coverageURL: URL { directory.appendingPathComponent("coverage.json") }
 
     public init(directory: URL) { self.directory = directory }
 
@@ -19,6 +20,10 @@ public struct TrackingStore {
 
     public func saveVisits(_ visits: [Visit]) throws { try write(visits, to: visitsURL) }
     public func saveSources(_ sources: [Source]) throws { try write(sources, to: sourcesURL) }
+    public func loadCoverage() throws -> RecordingCoverage {
+        try read(RecordingCoverage.self, from: coverageURL) ?? RecordingCoverage()
+    }
+    public func saveCoverage(_ coverage: RecordingCoverage) throws { try write(coverage, to: coverageURL) }
 
     private func read<Value: Decodable>(_ type: Value.Type, from url: URL) throws -> Value? {
         do {
