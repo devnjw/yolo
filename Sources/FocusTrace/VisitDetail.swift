@@ -6,8 +6,16 @@ struct VisitDetail: View {
     @ObservedObject var tracker: Tracker
     let source: Source
     let day: DateInterval
+    let distractingOnly: Bool
+    let sourceFilter: String
     let dismiss: () -> Void
-    private var activity: DayActivity { DayActivity(ledger: tracker.ledger, interval: day) }
+    private var activity: DayActivity {
+        let services = Set(tracker.sources.filter {
+            (!distractingOnly || $0.isDistracting) && (sourceFilter == "all" || $0.kind.rawValue == sourceFilter)
+        }.map(\.id))
+        return DayActivity(ledger: tracker.ledger, interval: day,
+                           includedServices: distractingOnly || sourceFilter != "all" ? services : nil)
+    }
 
     var body: some View {
         let item = activity.sources[source.id]
@@ -28,7 +36,7 @@ struct VisitDetail: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(dayLabel(day.start)).font(AppType.label).foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 20) {
-                    UsageMetric(title: "Time spent", value: timeLabel(stats.seconds), caption: "\(shareLabel(item?.timeShare ?? 0)) of tracked time", compact: true)
+                    UsageMetric(title: "Time spent", value: timeLabel(stats.seconds), caption: "\(shareLabel(item?.timeShare ?? 0)) of time in this view", compact: true)
                     UsageMetric(title: "Visits", value: "\(stats.visits)", caption: visits.contains(where: { $0.start < day.start }) ? "Excludes visits started earlier" : "", compact: true)
                     UsageMetric(title: "Longest visit", value: timeLabel(longest), caption: "", compact: true)
                         .help("The longest recorded visit, counting only time within this day.")
@@ -63,9 +71,15 @@ struct VisitDetail: View {
                     }
                 }.frame(height: min(244, CGFloat(visits.count) * (AppLayout.rowHeight + 1) - 1 + 24))
             }
-            if source.archived {
-                Text("Removed from tracking. Past visits are kept.").font(AppType.caption).foregroundStyle(.secondary)
-            }
+            Toggle("Mark as distracting", isOn: Binding(
+                get: { tracker.source(for: source.id)?.isDistracting ?? false },
+                set: {
+                    tracker.setDistracting(source, enabled: $0)
+                    if distractingOnly, !$0, tracker.actionError == nil { dismiss() }
+                }
+            ))
+            Text("This selection filters past and future activity. All services continue to be recorded.")
+                .font(AppType.caption).foregroundStyle(.secondary)
         }.padding(AppLayout.pageInset).frame(width: 560)
     }
 

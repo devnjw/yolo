@@ -32,7 +32,6 @@ import TrackingCore
     private var distributedObservers: [NSObjectProtocol] = []
     private let store: TrackingStore
     var dataURL: URL { store.visitsURL }
-    var activeSources: [Source] { sources.filter { !$0.archived } }
     func source(for id: Service) -> Source? { sources.first { $0.id == id } }
 
     private init() {
@@ -46,8 +45,9 @@ import TrackingCore
         do {
             ledger = Ledger(visits: try store.loadVisits())
             sources = try store.loadSources()
+            try store.saveSources(sources)
         } catch {
-            storageError = "Could not read saved data. Tracking stopped to protect your records. \(error.localizedDescription)"
+            storageError = "Could not load or prepare saved data. Tracking stopped to protect your records. \(error.localizedDescription)"
         }
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
@@ -128,23 +128,21 @@ import TrackingCore
             ledger.stop(at: now); status = "Idle"
             saveIfNeeded(); return
         }
-        let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        let app = frontmost?.bundleIdentifier ?? frontmost?.executableURL?.path
         if app != previousApp {
             generation += 1; previousApp = app
             ledger.stop(at: now); save()
             guard running else { return }
         }
-        if let service = Source.matchApp(app, sources: sources) {
-            ledger.observe(service, at: now); status = "Tracking \(source(for: service)?.name ?? "app")"
-        } else if let browser = Browser.eligibleBrowser(frontmostID: app, enabled: enabledBrowsers,
-                                                       blocked: blockedBrowsers, websitesEnabled: websitesEnabled) {
+        if let browser = Browser.eligibleBrowser(frontmostID: app, enabled: enabledBrowsers,
+                                                 blocked: blockedBrowsers, websitesEnabled: websitesEnabled) {
             readBrowser(browser)
+        } else if let app {
+            observe(SourceCatalog.app(identifier: app, name: frontmost?.localizedName ?? app, sources: sources), at: now)
         } else {
             ledger.observe(nil, at: now)
-            if let browser = Browser.allCases.first(where: { $0.bundleID == app }) {
-                status = websitesEnabled && enabledBrowsers.contains(browser) && blockedBrowsers.contains(browser)
-                    ? "\(browser.name) access needed" : "Website tracking is off for \(browser.name)"
-            } else { status = "Tracking" }
+            status = "No active app"
         }
         saveIfNeeded()
     }
@@ -163,20 +161,43 @@ import TrackingCore
                   self.generation == token,
                   NSWorkspace.shared.frontmostApplication?.bundleIdentifier == selected.bundleID else { return }
             if let errorCode = result.errorCode {
-                self.ledger.stop(at: Date())
+                self.observe(SourceCatalog.app(identifier: selected.bundleID, name: selected.name, sources: self.sources), at: Date())
                 if errorCode == -1743 {
                     self.blockedBrowsers.insert(selected)
                     self.browserStatuses[selected] = "Allow \(selected.name) in System Settings → Privacy & Security → Automation, then retry."
                 } else {
                     self.browserStatuses[selected] = "Could not read the active tab (\(errorCode)). Retrying."
                 }
-                self.status = "Browser access needed"
+                if self.running { self.status = "Tracking \(selected.name) · website access needed" }
             } else {
-                self.ledger.observe(result.service, at: Date())
+                let source = result.source ?? SourceCatalog.app(identifier: selected.bundleID, name: selected.name, sources: self.sources)
+                self.observe(source, at: Date())
                 self.browserStatuses[selected] = "Connected to \(selected.name)."
-                self.status = result.service.map { "Tracking \(self.source(for: $0)?.name ?? "website")" } ?? "Tracking"
             }
             self.saveIfNeeded()
+        }
+    }
+
+    private func observe(_ source: Source, at now: Date) {
+        do {
+            var next = sources
+            if let index = next.firstIndex(where: { $0.id == source.id }) {
+                next[index].archived = false
+            } else {
+                next.append(source)
+            }
+            // Persist the identity before a visit can reference it.
+            if next != sources {
+                try store.saveSources(next)
+                sources = next
+            }
+            ledger.observe(source.id, at: now)
+            status = "Tracking \(source.name)"
+        } catch {
+            ledger.stop(at: now)
+            running = false
+            status = "Storage error"
+            storageError = "Could not save sources. Tracking stopped. \(error.localizedDescription)"
         }
     }
 
@@ -203,38 +224,32 @@ import TrackingCore
             throw SourceInputError("Enter a valid domain, such as reddit.com.")
         }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        try addSource(Source(name: trimmed.isEmpty ? host : trimmed, kind: .website, identifier: host))
+        try addSource(Source(name: trimmed.isEmpty ? host : trimmed, kind: .website, identifier: host, isDistracting: true))
     }
 
     func addApp(at url: URL) throws {
         guard let bundle = Bundle(url: url), let id = bundle.bundleIdentifier else {
             throw SourceInputError("Choose a Mac application.")
         }
-        guard id != Bundle.main.bundleIdentifier else {
-            throw SourceInputError("FocusTrace cannot track itself.")
-        }
-        guard !Browser.allCases.contains(where: { $0.bundleID == id }) else {
-            throw SourceInputError("For Chrome or Safari, add individual websites instead.")
-        }
         let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
             ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
             ?? url.deletingPathExtension().lastPathComponent
-        try addSource(Source(name: name, kind: .app, identifier: id))
+        try addSource(Source(name: name, kind: .app, identifier: id, isDistracting: true))
     }
 
     private func addSource(_ source: Source) throws {
         var next = sources
         if let index = next.firstIndex(where: { $0.kind == source.kind && ([$0.identifier] + $0.aliases).contains(source.identifier) }) {
-            guard next[index].archived else { throw SourceInputError("This source is already tracked.") }
             next[index].archived = false
+            next[index].isDistracting = true
         } else { next.append(source) }
         try updateSources(next)
     }
 
-    func removeSource(_ source: Source) {
+    func setDistracting(_ source: Source, enabled: Bool) {
         var next = sources
         guard let index = next.firstIndex(where: { $0.id == source.id }) else { return }
-        next[index].archived = true
+        next[index].isDistracting = enabled
         do { try updateSources(next) }
         catch { actionError = error.localizedDescription }
     }
@@ -243,10 +258,7 @@ import TrackingCore
         guard storageError == nil else { throw SourceInputError("Resolve the storage error before changing sources.") }
         try store.saveSources(next)
         generation += 1
-        ledger.stop(at: Date())
         sources = next
-        save()
-        tick()
     }
 
     func exportCSV() {

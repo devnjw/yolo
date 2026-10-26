@@ -8,18 +8,37 @@ public struct Source: Codable, Identifiable, Equatable, Sendable {
     public let identifier: String
     public var aliases: [String]
     public var archived: Bool
+    public var isDistracting: Bool
 
     public init(id: Service = Service(rawValue: UUID().uuidString.lowercased()), name: String,
-                kind: Kind, identifier: String, aliases: [String] = [], archived: Bool = false) {
+                kind: Kind, identifier: String, aliases: [String] = [], archived: Bool = false,
+                isDistracting: Bool = false) {
         self.id = id; self.name = name; self.kind = kind
         self.identifier = identifier; self.aliases = aliases; self.archived = archived
+        self.isDistracting = isDistracting
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, kind, identifier, aliases, archived, isDistracting
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(Service.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        kind = try values.decode(Kind.self, forKey: .kind)
+        identifier = try values.decode(String.self, forKey: .identifier)
+        aliases = try values.decodeIfPresent([String].self, forKey: .aliases) ?? []
+        archived = try values.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        // The old catalog was a manually selected watchlist. Keep its selection.
+        isDistracting = try values.decodeIfPresent(Bool.self, forKey: .isDistracting) ?? !archived
     }
 
     public static let defaults: [Source] = [
-        Source(id: .kakao, name: "KakaoTalk", kind: .app, identifier: "com.kakao.KakaoTalkMac"),
-        Source(id: .linkedin, name: "LinkedIn", kind: .website, identifier: "linkedin.com"),
-        Source(id: .instagram, name: "Instagram", kind: .website, identifier: "instagram.com"),
-        Source(id: .youtube, name: "YouTube", kind: .website, identifier: "youtube.com", aliases: ["youtu.be"])
+        Source(id: .kakao, name: "KakaoTalk", kind: .app, identifier: "com.kakao.KakaoTalkMac", isDistracting: true),
+        Source(id: .linkedin, name: "LinkedIn", kind: .website, identifier: "linkedin.com", isDistracting: true),
+        Source(id: .instagram, name: "Instagram", kind: .website, identifier: "instagram.com", isDistracting: true),
+        Source(id: .youtube, name: "YouTube", kind: .website, identifier: "youtube.com", aliases: ["youtu.be"], isDistracting: true)
     ]
 
     public static func normalizedDomain(_ input: String) -> String? {

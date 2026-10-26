@@ -5,6 +5,40 @@ final class DayActivityTests: XCTestCase {
     private let start = Date(timeIntervalSince1970: 1_000_000)
     private var day: DateInterval { DateInterval(start: start, duration: 86400) }
 
+    func testFilteredReportUsesSameScopeForTotalsRankingsSharesAndTimeline() {
+        let ledger = Ledger(visits: [
+            Visit(service: .kakao, start: start, end: start.addingTimeInterval(20)),
+            Visit(service: .youtube, start: start.addingTimeInterval(30), end: start.addingTimeInterval(90)),
+            Visit(service: .linkedin, start: start.addingTimeInterval(100), end: start.addingTimeInterval(400))
+        ])
+        let report = DayActivity(ledger: ledger, interval: day, includedServices: [.kakao, .youtube])
+        XCTAssertEqual(report.statistics.seconds, 80)
+        XCTAssertEqual(report.statistics.visits, 2)
+        XCTAssertEqual(report.statistics.shortVisits, 1)
+        XCTAssertEqual(report.mostTime, .youtube)
+        XCTAssertNil(report.sources[.linkedin])
+        XCTAssertEqual(report.sources[.youtube]?.timeShare, 0.75)
+        XCTAssertEqual(report.hourlyTotals().reduce(0, +), 80)
+        XCTAssertEqual(DayActivity(ledger: ledger, interval: day).statistics.seconds, 380)
+    }
+
+    func testEmptySelectionMeansNoActivityAndActiveFilteredVisitIsNotQuickCheck() {
+        var ledger = Ledger()
+        ledger.observe(.youtube, at: start)
+        ledger.observe(.youtube, at: start.addingTimeInterval(1))
+        let empty = DayActivity(ledger: ledger, interval: day, includedServices: [])
+        XCTAssertEqual(empty.statistics, .zero)
+        XCTAssertTrue(empty.sources.isEmpty)
+        XCTAssertNil(empty.mostTime)
+        XCTAssertNil(empty.mostVisits)
+        XCTAssertEqual(empty.hourlyTotals().reduce(0, +), 0)
+        let selected = DayActivity(ledger: ledger, interval: day, includedServices: [.youtube])
+        XCTAssertEqual(selected.statistics.visits, 1)
+        XCTAssertEqual(selected.statistics.shortVisits, 0)
+        XCTAssertEqual(selected.statistics.seconds, 1)
+        XCTAssertEqual(ledger.visits.count, 1)
+    }
+
     func testSeparatesMostTimeFromMostVisitsAndComputesShare() {
         let ledger = Ledger(visits: [
             Visit(service: .instagram, start: start, end: start.addingTimeInterval(120)),

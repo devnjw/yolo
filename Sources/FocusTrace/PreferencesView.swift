@@ -61,6 +61,8 @@ struct PreferencesView: View {
             }
             Divider()
             VStack(alignment: .leading, spacing: 16) {
+                Text("All foreground apps are recorded automatically. Website tracking separates browser time into individual sites.")
+                    .font(.callout).foregroundStyle(.secondary)
                 Toggle("Website tracking", isOn: $tracker.websitesEnabled)
                 if tracker.websitesEnabled {
                     VStack(alignment: .leading, spacing: 12) {
@@ -85,7 +87,7 @@ struct PreferencesView: View {
                         }
                     }.padding(.leading, 20)
                     if tracker.enabledBrowsers.isEmpty {
-                        Text("Select a browser to track websites.")
+                        Text("Select a browser to track websites. Otherwise, its time is recorded as app activity.")
                             .font(AppType.caption).foregroundStyle(.secondary)
                     }
                 }

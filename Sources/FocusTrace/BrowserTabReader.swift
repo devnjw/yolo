@@ -5,7 +5,7 @@ import TrackingCore
 /// classified here and never leave this boundary or enter persistent storage.
 final class BrowserTabReader {
     struct Result: Sendable {
-        let service: Service?
+        let source: Source?
         let errorCode: Int?
     }
 
@@ -24,8 +24,8 @@ final class BrowserTabReader {
                 """
                 var error: NSDictionary?
                 let result = NSAppleScript(source: script)?.executeAndReturnError(&error)
-                let service = result?.stringValue.flatMap { Source.matchWebsite($0, sources: sources) }
-                continuation.resume(returning: Result(service: service,
+                let source = result?.stringValue.flatMap { SourceCatalog.website(url: $0, sources: sources) }
+                continuation.resume(returning: Result(source: source,
                     errorCode: error?[NSAppleScript.errorNumber] as? Int))
             }
         }

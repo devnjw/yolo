@@ -17,10 +17,11 @@ public struct DayActivity {
     public let mostTime: Service?
     public let mostVisits: Service?
 
-    public init(ledger: Ledger, interval: DateInterval) {
+    public init(ledger: Ledger, interval: DateInterval, includedServices: Set<Service>? = nil) {
         self.interval = interval
         let visits = ledger.visits.filter {
-            ($0.start >= interval.start && $0.start < interval.end) || $0.seconds(in: interval) > 0
+            (includedServices?.contains($0.service) ?? true) &&
+                (($0.start >= interval.start && $0.start < interval.end) || $0.seconds(in: interval) > 0)
         }
         statistics = Statistics(visits: visits, activeID: ledger.activeID, in: interval)
         let grouped = Dictionary(grouping: visits, by: \.service)

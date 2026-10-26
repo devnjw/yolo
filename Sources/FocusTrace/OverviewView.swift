@@ -5,6 +5,7 @@ import TrackingCore
 struct OverviewView: View {
     let report: DayActivity
     let sources: [Source]
+    let distractingOnly: Bool
     let showTimeline: Bool
     let accent: Color
     let onSelect: (Source) -> Void
@@ -13,10 +14,10 @@ struct OverviewView: View {
         let stats = report.statistics
         return VStack(alignment: .leading, spacing: AppLayout.sectionGap) {
             HStack(alignment: .top, spacing: AppLayout.sectionGap) {
-                UsageMetric(title: "Time spent", value: timeLabel(stats.seconds), caption: "On tracked apps & sites")
-                    .help("Time tracked apps or websites were in the foreground. This is not total Mac usage.")
-                UsageMetric(title: "Visits", value: "\(stats.visits)", caption: "Switches to tracked sources")
-                    .help("Switching to a tracked app or website starts a visit. Moving within the same source does not.")
+                UsageMetric(title: "Time spent", value: timeLabel(stats.seconds), caption: distractingOnly ? "On distracting apps & sites" : "On apps & sites in this view")
+                    .help("Recorded foreground time for this view. Idle and inactive screen time are excluded.")
+                UsageMetric(title: "Visits", value: "\(stats.visits)", caption: "Visits in this view")
+                    .help("Switching to an app or website starts a visit. Moving within the same source does not.")
                 UsageMetric(title: "Quick checks", value: "\(stats.shortVisits)", caption: "Visits of 30s or less")
                     .help("Completed visits lasting 30 seconds or less. A short visit does not necessarily mean a distraction.")
             }
@@ -54,9 +55,9 @@ struct OverviewView: View {
                         }
                         .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) }
                         .frame(height: 110)
-                        .accessibilityLabel("Time spent by hour, all tracked sources")
+                        .accessibilityLabel("Time spent by hour for this view")
                     } else {
-                        Text("No time recorded on tracked sources for this day.")
+                        Text("No time recorded in this view for this day.")
                             .font(.callout).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, minHeight: 90)
                     }
@@ -76,7 +77,7 @@ struct OverviewView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(source.name).font(AppType.label).lineLimit(1)
                             Text(byTime
-                                 ? "\(timeLabel(item.statistics.seconds)) · \(shareLabel(item.timeShare)) of tracked time"
+                                 ? "\(timeLabel(item.statistics.seconds)) · \(shareLabel(item.timeShare)) of time in this view"
                                  : "\(item.statistics.visits) \(item.statistics.visits == 1 ? "visit" : "visits") · \(timeLabel(item.statistics.seconds)) total")
                                 .font(AppType.caption).foregroundStyle(.secondary).lineLimit(1)
                         }

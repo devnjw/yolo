@@ -18,12 +18,17 @@ struct Dashboard: View {
     @State private var detail: Source?
     @AppStorage("showTimeline") private var showTimeline = true
     @AppStorage("sourceFilter") private var sourceFilter = "all"
+    @AppStorage("distractingOnly") private var distractingOnly = false
     @AppStorage("sourceSort") private var sourceSort = "time"
     @Environment(\.colorScheme) private var scheme
     private var accent: Color { scheme == .dark ? Color(red: 0.66, green: 0.65, blue: 0.98) : Color(red: 0.36, green: 0.34, blue: 0.76) }
     private var day: DateInterval { Calendar.current.dateInterval(of: .day, for: date)! }
     var body: some View {
-        let report = DayActivity(ledger: tracker.ledger, interval: day)
+        let visibleSources = tracker.sources.filter {
+            (!distractingOnly || $0.isDistracting) && (sourceFilter == "all" || $0.kind.rawValue == sourceFilter)
+        }
+        let includedServices = distractingOnly || sourceFilter != "all" ? Set(visibleSources.map(\.id)) : nil
+        let report = DayActivity(ledger: tracker.ledger, interval: day, includedServices: includedServices)
         return HStack(spacing: 0) {
             sidebar
             Divider()
@@ -36,14 +41,24 @@ struct Dashboard: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: AppLayout.sectionGap) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Picker("Activity scope", selection: $distractingOnly) {
+                                Text("All activity").tag(false)
+                                Text("Distractions only").tag(true)
+                            }.pickerStyle(.segmented).labelsHidden().frame(width: 280)
+                            Text(section == .sources
+                                 ? "Apps and sites are added automatically. Select the services that distract you."
+                                 : (distractingOnly ? "Showing activity for services you marked as distracting." : "Showing recorded foreground activity."))
+                                .font(AppType.caption).foregroundStyle(.secondary)
+                        }
                         if section == .overview {
-                            OverviewView(report: report, sources: tracker.sources,
+                            OverviewView(report: report, sources: visibleSources, distractingOnly: distractingOnly,
                                          showTimeline: showTimeline, accent: accent) { detail = $0 }
                         }
-                        SourceListView(sources: tracker.sources, report: report, section: $section,
+                        SourceListView(sources: visibleSources, report: report, section: $section,
                                        search: $search, sourceFilter: $sourceFilter, sourceSort: sourceSort,
                                        accent: accent, onSelect: { detail = $0 },
-                                       onAdd: { showingAdd = true }, onRemove: tracker.removeSource)
+                                       onAdd: { showingAdd = true }, onSetDistracting: tracker.setDistracting)
                     }
                     .frame(maxWidth: AppLayout.contentWidth)
                     .padding(AppLayout.pageInset)
@@ -101,7 +116,8 @@ struct Dashboard: View {
         } else if showingAdd {
             AddSourceView(tracker: tracker, dismiss: dismissDialog)
         } else if let source = detail {
-            VisitDetail(tracker: tracker, source: source, day: day, dismiss: dismissDialog)
+            VisitDetail(tracker: tracker, source: source, day: day, distractingOnly: distractingOnly,
+                        sourceFilter: sourceFilter, dismiss: dismissDialog)
         }
     }
 
@@ -175,7 +191,7 @@ struct Dashboard: View {
                 }.buttonStyle(QuietButtonStyle()).foregroundStyle(.secondary)
             } else {
                 Button { showingAdd = true } label: {
-                    Label("Add source", systemImage: "plus")
+                    Label("Add distraction", systemImage: "plus")
                         .frame(height: AppLayout.controlHeight).padding(.horizontal, 8).contentShape(Rectangle())
                 }
                     .buttonStyle(QuietButtonStyle())
