@@ -4,31 +4,28 @@ import TrackingCore
 
 struct VisitDetail: View {
     @ObservedObject var tracker: Tracker
-    let source: Source
+    let group: ServiceGroup
     let day: DateInterval
-    let distractingOnly: Bool
-    let sourceFilter: String
     let dismiss: () -> Void
+    private var currentGroup: ServiceGroup {
+        ServiceGrouping.groups(from: tracker.sources).first { $0.id == group.id } ?? group
+    }
     private var activity: DayActivity {
-        let services = Set(tracker.sources.filter {
-            (!distractingOnly || $0.isDistracting) && (sourceFilter == "all" || $0.kind.rawValue == sourceFilter)
-        }.map(\.id))
-        return DayActivity(ledger: tracker.ledger, interval: day,
-                           includedServices: distractingOnly || sourceFilter != "all" ? services : nil)
+        DayActivity(ledger: tracker.ledger, interval: day,
+                    includedServices: Set(tracker.sources.filter(\.isDistracting).map(\.id)))
     }
 
     var body: some View {
-        let item = activity.sources[source.id]
-        let visits = item?.visits ?? []
-        let stats = item?.statistics ?? .zero
-        let longest = item?.longestSeconds ?? 0
+        let activity = activity
+        let group = currentGroup
+        let visits = activity.visits(for: group.sourceIDs)
+        let stats = activity.statistics(for: group.sourceIDs)
+        let longest = visits.map { $0.seconds(in: day) }.max() ?? 0
         return VStack(alignment: .leading, spacing: AppLayout.sectionGap) {
             HStack(spacing: 12) {
-                SourceIcon(source: source)
+                SourceIcon(source: group.representative)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(source.name).font(AppType.dialogTitle)
-                    Text(source.kind == .website ? source.identifier : "Mac app")
-                        .font(AppType.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text(group.name).font(AppType.dialogTitle)
                 }
                 Spacer()
                 DialogCloseButton(action: dismiss)
@@ -36,7 +33,7 @@ struct VisitDetail: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(intervalLabel).font(AppType.label).foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 20) {
-                    UsageMetric(title: "Time spent", value: timeLabel(stats.seconds), caption: "\(shareLabel(item?.timeShare ?? 0)) of time in this view", compact: true)
+                    UsageMetric(title: "Time spent", value: timeLabel(stats.seconds), caption: "\(shareLabel(activity.statistics.seconds > 0 ? stats.seconds / activity.statistics.seconds : 0)) of time in this view", compact: true)
                     UsageMetric(title: "Visits", value: "\(stats.visits)", caption: visits.contains(where: { $0.start < day.start }) ? "Excludes visits started earlier" : "", compact: true)
                     UsageMetric(title: "Longest visit", value: timeLabel(longest), caption: "", compact: true)
                         .help("The longest recorded visit, counting only time within the selected period.")
@@ -72,13 +69,13 @@ struct VisitDetail: View {
                 }.frame(height: min(244, CGFloat(visits.count) * (AppLayout.rowHeight + 1) - 1 + 24))
             }
             Toggle("Mark as distracting", isOn: Binding(
-                get: { tracker.source(for: source.id)?.isDistracting ?? false },
+                get: { currentGroup.isDistracting },
                 set: {
-                    tracker.setDistracting(source, enabled: $0)
-                    if distractingOnly, !$0, tracker.actionError == nil { dismiss() }
+                    tracker.setDistracting(groupID: group.id, enabled: $0)
+                    if !$0, tracker.actionError == nil { dismiss() }
                 }
             ))
-            Text("This selection filters past and future activity. All services continue to be recorded.")
+            Text("Applies to all apps and websites in this service, including past and future activity. Recording continues.")
                 .font(AppType.caption).foregroundStyle(.secondary)
         }.padding(AppLayout.pageInset).frame(width: 560)
     }

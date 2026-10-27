@@ -43,7 +43,7 @@ private struct SearchTextField: NSViewRepresentable {
 
     func makeNSView(context: Context) -> ExplicitSearchField {
         let field = ExplicitSearchField()
-        field.placeholderString = "Search"
+        field.placeholderString = "Search services"
         field.font = .systemFont(ofSize: 13)
         field.isBezeled = false
         field.drawsBackground = false
@@ -51,7 +51,7 @@ private struct SearchTextField: NSViewRepresentable {
         field.isBordered = false
         field.usesSingleLineMode = true
         field.delegate = context.coordinator
-        field.setAccessibilityLabel("Search sources")
+        field.setAccessibilityLabel("Search services")
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         return field
     }

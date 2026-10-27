@@ -46,7 +46,7 @@ import TrackingCore
         do {
             ledger = Ledger(visits: try store.loadVisits())
             coverage = try store.loadCoverage()
-            sources = try store.loadSources()
+            sources = ServiceGrouping.normalizedSelection(try store.loadSources())
             try store.saveSources(sources)
         } catch {
             storageError = "Could not load or prepare saved data. Tracking stopped to protect your records. \(error.localizedDescription)"
@@ -189,6 +189,7 @@ import TrackingCore
             } else {
                 next.append(source)
             }
+            next = ServiceGrouping.normalizedSelection(next)
             // Persist the identity before a visit can reference it.
             if next != sources {
                 try store.saveSources(next)
@@ -247,13 +248,15 @@ import TrackingCore
             next[index].archived = false
             next[index].isDistracting = true
         } else { next.append(source) }
-        try updateSources(next)
+        try updateSources(ServiceGrouping.normalizedSelection(next))
     }
 
     func setDistracting(_ source: Source, enabled: Bool) {
-        var next = sources
-        guard let index = next.firstIndex(where: { $0.id == source.id }) else { return }
-        next[index].isDistracting = enabled
+        setDistracting(groupID: ServiceGrouping.identity(for: source), enabled: enabled)
+    }
+
+    func setDistracting(groupID: String, enabled: Bool) {
+        let next = ServiceGrouping.settingDistracting(enabled, for: groupID, in: sources)
         do { try updateSources(next) }
         catch { actionError = error.localizedDescription }
     }

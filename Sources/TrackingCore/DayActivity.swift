@@ -48,6 +48,18 @@ public struct DayActivity {
         sources[service]?.statistics ?? .zero
     }
 
+    public func visits(for services: Set<Service>) -> [Visit] {
+        let entries: [Visit] = services.flatMap { sources[$0]?.visits ?? [] }
+        return entries.sorted { lhs, rhs in
+            if lhs.start == rhs.start { return lhs.id.uuidString < rhs.id.uuidString }
+            return lhs.start > rhs.start
+        }
+    }
+
+    public func statistics(for services: Set<Service>) -> Statistics {
+        services.reduce(.zero) { $0 + statistics(for: $1) }
+    }
+
     /// Calendar hour boundaries preserve 23/25-hour days; repeated hours share a bar.
     public func hourlyTotals(calendar: Calendar = .current) -> [TimeInterval] {
         var totals = Array(repeating: 0.0, count: 24)

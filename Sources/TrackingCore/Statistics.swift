@@ -7,6 +7,11 @@ public struct Statistics: Equatable {
 
     public static let zero = Statistics(seconds: 0, visits: 0, shortVisits: 0)
 
+    public static func + (lhs: Statistics, rhs: Statistics) -> Statistics {
+        Statistics(seconds: lhs.seconds + rhs.seconds, visits: lhs.visits + rhs.visits,
+                   shortVisits: lhs.shortVisits + rhs.shortVisits)
+    }
+
     private init(seconds: TimeInterval, visits: Int, shortVisits: Int) {
         self.seconds = seconds
         self.visits = visits

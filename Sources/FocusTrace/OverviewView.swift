@@ -7,8 +7,8 @@ struct OverviewView: View {
     let ledger: Ledger
     let sources: [Source]
     let accent: Color
-    let onSelect: (Source, DateInterval) -> Void
-    let onShowActivity: () -> Void
+    let onSelect: (ServiceGroup, DateInterval) -> Void
+    let onShowServices: () -> Void
     @State private var selection: Int?
     @State private var hover: Int?
 
@@ -199,14 +199,14 @@ struct OverviewView: View {
 
     private var ranking: some View {
         let activity = listReport
-        let rows = sources.filter {
-            let stats = activity.statistics(for: $0.id)
+        let rows = ServiceGrouping.groups(from: sources).filter {
+            let stats = activity.statistics(for: $0.sourceIDs)
             return stats.seconds > 0 || stats.visits > 0
         }.sorted {
-            let lhs = activity.statistics(for: $0.id).seconds, rhs = activity.statistics(for: $1.id).seconds
+            let lhs = activity.statistics(for: $0.sourceIDs).seconds, rhs = activity.statistics(for: $1.sourceIDs).seconds
             return lhs == rhs ? $0.name.localizedStandardCompare($1.name) == .orderedAscending : lhs > rhs
         }
-        let maximum = rows.map { activity.statistics(for: $0.id).seconds }.max() ?? 0
+        let maximum = rows.map { activity.statistics(for: $0.sourceIDs).seconds }.max() ?? 0
         return VStack(alignment: .leading, spacing: 0) {
             if let bin = selectedBin {
                 HStack {
@@ -222,11 +222,11 @@ struct OverviewView: View {
             }.font(AppType.caption).foregroundStyle(.secondary).frame(height: 26, alignment: .top)
                 .help(dailyAverage ? "Daily averages across recorded days in the selected range." : "Totals for the selected period.")
             ForEach(rows) { source in
-                let stats = activity.statistics(for: source.id)
+                let stats = activity.statistics(for: source.sourceIDs)
                 Button { onSelect(source, listInterval) } label: {
                     VStack(spacing: 9) {
                         HStack(spacing: 12) {
-                            SourceIcon(source: source, size: 24)
+                            SourceIcon(source: source.representative, size: 24)
                             Text(source.name).font(AppType.body).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                             Text(overviewTimeLabel(stats.seconds / divisor)).fixedSize().frame(width: 72, alignment: .trailing)
                             Text(countLabel(Double(stats.visits) / divisor)).fixedSize().foregroundStyle(.secondary).frame(width: 56, alignment: .trailing)
@@ -242,8 +242,8 @@ struct OverviewView: View {
                 Text((selectedBin.map { $0.seconds != nil } ?? report.hasData) ? "No distracting activity recorded." : "No data for this period.")
                     .font(AppType.body).foregroundStyle(.secondary).padding(.vertical, 24)
             }
-            Button(action: onShowActivity) {
-                HStack(spacing: 5) { Text("View all activity"); Image(systemName: "arrow.up.right") }
+            Button(action: onShowServices) {
+                HStack(spacing: 5) { Text("Manage services"); Image(systemName: "arrow.up.right") }
                     .font(AppType.caption).foregroundStyle(.secondary).padding(.vertical, 14)
             }.buttonStyle(.plain)
         }
