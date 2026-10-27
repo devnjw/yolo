@@ -6,13 +6,14 @@ struct VisitDetail: View {
     @ObservedObject var tracker: Tracker
     let group: ServiceGroup
     let day: DateInterval
+    let includedServices: Set<Service>
     let dismiss: () -> Void
     private var currentGroup: ServiceGroup {
         ServiceGrouping.groups(from: tracker.sources).first { $0.id == group.id } ?? group
     }
     private var activity: DayActivity {
         DayActivity(ledger: tracker.ledger, interval: day,
-                    includedServices: Set(tracker.sources.filter(\.isDistracting).map(\.id)))
+                    includedServices: includedServices)
     }
 
     var body: some View {
@@ -68,15 +69,11 @@ struct VisitDetail: View {
                     }
                 }.frame(height: min(244, CGFloat(visits.count) * (AppLayout.rowHeight + 1) - 1 + 24))
             }
-            Toggle("Mark as distracting", isOn: Binding(
-                get: { currentGroup.isDistracting },
-                set: {
-                    tracker.setDistracting(groupID: group.id, enabled: $0)
-                    if !$0, tracker.actionError == nil { dismiss() }
-                }
-            ))
-            Text("Applies to all apps and websites in this service, including past and future activity. Recording continues.")
-                .font(AppType.caption).foregroundStyle(.secondary)
+            HStack {
+                Text("Category").font(AppType.body).foregroundStyle(.secondary)
+                Spacer()
+                ServiceCategoryPicker(tracker: tracker, group: group)
+            }
         }.padding(AppLayout.pageInset).frame(width: 560)
     }
 

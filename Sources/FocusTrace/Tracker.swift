@@ -8,6 +8,7 @@ import TrackingCore
     @Published private(set) var ledger = Ledger()
     @Published private(set) var coverage = RecordingCoverage()
     @Published private(set) var sources = Source.defaults
+    @Published private(set) var categories = CategoryCatalog()
     @Published private(set) var running = false
     @Published private(set) var status = "Starting"
     @Published private(set) var browserStatuses: [Browser: String] = [:]
@@ -46,7 +47,9 @@ import TrackingCore
         do {
             ledger = Ledger(visits: try store.loadVisits())
             coverage = try store.loadCoverage()
-            sources = ServiceGrouping.normalizedSelection(try store.loadSources())
+            sources = try store.loadSources()
+            categories = try store.loadCategories(legacySources: sources)
+            try store.saveCategories(categories)
             try store.saveSources(sources)
         } catch {
             storageError = "Could not load or prepare saved data. Tracking stopped to protect your records. \(error.localizedDescription)"
@@ -189,11 +192,9 @@ import TrackingCore
             } else {
                 next.append(source)
             }
-            next = ServiceGrouping.normalizedSelection(next)
             // Persist the identity before a visit can reference it.
             if next != sources {
-                try store.saveSources(next)
-                sources = next
+                try updateSources(next)
             }
             ledger.observe(source.id, at: now)
             status = "Tracking \(source.name)"
@@ -229,7 +230,7 @@ import TrackingCore
             throw SourceInputError("Enter a valid domain, such as reddit.com.")
         }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        try addSource(Source(name: trimmed.isEmpty ? host : trimmed, kind: .website, identifier: host, isDistracting: true))
+        try addSource(Source(name: trimmed.isEmpty ? host : trimmed, kind: .website, identifier: host))
     }
 
     func addApp(at url: URL) throws {
@@ -239,30 +240,52 @@ import TrackingCore
         let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
             ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
             ?? url.deletingPathExtension().lastPathComponent
-        try addSource(Source(name: name, kind: .app, identifier: id, isDistracting: true))
+        try addSource(Source(name: name, kind: .app, identifier: id))
     }
 
     private func addSource(_ source: Source) throws {
         var next = sources
         if let index = next.firstIndex(where: { $0.kind == source.kind && ([$0.identifier] + $0.aliases).contains(source.identifier) }) {
             next[index].archived = false
-            next[index].isDistracting = true
         } else { next.append(source) }
-        try updateSources(ServiceGrouping.normalizedSelection(next))
+        try updateSources(next)
     }
 
-    func setDistracting(_ source: Source, enabled: Bool) {
-        setDistracting(groupID: ServiceGrouping.identity(for: source), enabled: enabled)
-    }
-
-    func setDistracting(groupID: String, enabled: Bool) {
-        let next = ServiceGrouping.settingDistracting(enabled, for: groupID, in: sources)
-        do { try updateSources(next) }
+    func setCategory(_ categoryID: String, for groupID: String) {
+        do { try editCategories { try $0.assign(categoryID, to: groupID) } }
         catch { actionError = error.localizedDescription }
+    }
+
+    func selectCategories(_ ids: Set<String>?) {
+        do { try editCategories { try $0.select(ids) } }
+        catch { actionError = error.localizedDescription }
+    }
+
+    func createCategory(name: String, tint: ActivityCategory.Tint, customHex: UInt32?, assigning groupID: String? = nil) throws {
+        try editCategories { try $0.create(name: name, tint: tint, customHex: customHex, assigning: groupID) }
+    }
+    func updateCategory(_ id: String, name: String, tint: ActivityCategory.Tint, customHex: UInt32?) throws {
+        try editCategories { try $0.update(id, name: name, tint: tint, customHex: customHex) }
+    }
+    func removeCategory(_ id: String, movingTo destination: String) throws {
+        try editCategories { try $0.remove(id, movingTo: destination) }
+    }
+    private func editCategories(_ edit: (inout CategoryCatalog) throws -> Void) throws {
+        guard storageError == nil else { throw CategoryError("Resolve the storage error before changing categories.") }
+        var next = categories
+        try edit(&next)
+        try store.saveCategories(next)
+        categories = next
     }
 
     private func updateSources(_ next: [Source]) throws {
         guard storageError == nil else { throw SourceInputError("Resolve the storage error before changing sources.") }
+        var nextCategories = categories
+        nextCategories.applyServiceDefaults(to: next)
+        if nextCategories != categories {
+            try store.saveCategories(nextCategories)
+            categories = nextCategories
+        }
         try store.saveSources(next)
         generation += 1
         sources = next
@@ -273,7 +296,7 @@ import TrackingCore
         panel.nameFieldStringValue = "FocusTrace.csv"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try VisitCSV.export(ledger.visits, sources: sources)
+            try VisitCSV.export(ledger.visits, sources: sources, categories: categories)
                 .write(to: url, atomically: true, encoding: .utf8)
         }
         catch {

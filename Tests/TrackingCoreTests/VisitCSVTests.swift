@@ -32,4 +32,15 @@ final class VisitCSVTests: XCTestCase {
         XCTAssertTrue(csv.contains("\"unknown-id\","))
         XCTAssertEqual(csv.split(separator: "\n").count, 3)
     }
+
+    func testCategoryExportReflectsCurrentAssignmentAndEscapesUserNames() throws {
+        let source = Source(name: "Notion", kind: .app, identifier: "notion.id")
+        var catalog = CategoryCatalog()
+        let id = try catalog.create(name: "=Research, notes", assigning: ServiceGrouping.identity(for: source))
+        let csv = VisitCSV.export([visit(source.id)], sources: [source], categories: catalog)
+        XCTAssertTrue(csv.hasPrefix("service,start_utc,end_utc,seconds,category\n"))
+        XCTAssertTrue(csv.hasSuffix(",\"'=Research, notes\""))
+        try catalog.remove(id)
+        XCTAssertTrue(VisitCSV.export([visit(source.id)], sources: [source], categories: catalog).hasSuffix(",\"Other\""))
+    }
 }

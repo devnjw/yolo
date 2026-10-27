@@ -2,10 +2,9 @@ import SwiftUI
 import TrackingCore
 
 struct ServicesView: View {
+    @ObservedObject var tracker: Tracker
     let groups: [ServiceGroup]
     @Binding var search: String
-    let accent: Color
-    let onSetDistracting: (ServiceGroup, Bool) -> Void
     @State private var expandedID: String?
 
     var body: some View {
@@ -14,8 +13,7 @@ struct ServicesView: View {
             SearchField(text: $search).frame(width: 238).padding(.bottom, 24)
             HStack {
                 Spacer()
-                Text("Distracting").font(AppType.caption).foregroundStyle(.secondary)
-                    .help("Mark services that distract you. All services continue to be recorded.")
+                Text("Category").font(AppType.caption).foregroundStyle(.secondary)
             }.padding(.bottom, 10)
             Divider()
             LazyVStack(spacing: 0) {
@@ -34,18 +32,8 @@ struct ServicesView: View {
                                 .accessibilityLabel(group.name)
                                 .accessibilityValue(expandedID == group.id ? "Expanded" : "Collapsed")
                                 .accessibilityHint("Show the apps and websites included in this service")
-                            Button { onSetDistracting(group, !group.isDistracting) } label: {
-                                Image(systemName: group.isDistracting ? "bolt.fill" : "bolt")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(group.isDistracting ? accent : .secondary)
-                                    .frame(width: 34, height: 32)
-                                    .background(group.isDistracting ? accent.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 6))
-                                    .contentShape(Rectangle())
-                            }.buttonStyle(QuietButtonStyle()).padding(.trailing, 14)
-                                .help(group.isDistracting ? "Remove \(group.name) from distractions" : "Mark \(group.name) as distracting")
-                                .accessibilityLabel("\(group.name): distracting service")
-                                .accessibilityValue(group.isDistracting ? "On" : "Off")
-                                .accessibilityAddTraits(group.isDistracting ? [.isSelected] : [])
+                            ServiceCategoryPicker(tracker: tracker, group: group)
+                                .frame(maxWidth: 190, alignment: .trailing)
                         }
                         if expandedID == group.id {
                             VStack(alignment: .leading, spacing: 10) {
@@ -61,7 +49,7 @@ struct ServicesView: View {
                                     }
                                 }
                                 if group.sources.count > 1 || group.sources.contains(where: { !$0.aliases.isEmpty }) {
-                                    Text("One distraction setting for this service.").padding(.top, 4)
+                                    Text("One category for this service.").padding(.top, 4)
                                 }
                             }.font(AppType.caption).foregroundStyle(.secondary)
                                 .padding(.leading, 38).padding(.top, 2).padding(.bottom, 18)

@@ -3,8 +3,14 @@ import SwiftUI
 import TrackingCore
 
 enum DashboardSection: String, CaseIterable {
-    case overview = "Overview", services = "Services"
-    var icon: String { self == .overview ? "chart.bar.xaxis" : "square.3.layers.3d" }
+    case overview = "Overview", services = "Services", settings = "Settings"
+    var icon: String {
+        switch self {
+        case .overview: return "chart.bar.xaxis"
+        case .services: return "square.3.layers.3d"
+        case .settings: return "gearshape"
+        }
+    }
 }
 
 struct Dashboard: View {
@@ -13,13 +19,13 @@ struct Dashboard: View {
     @State private var date = Date()
     @State private var period: ActivityPeriod = .day
     @State private var search = ""
-    @State private var showingSettings = false
+    @State private var settingsSection: SettingsSection = .general
     @State private var showingAdd = false
     @State private var showingCalendar = false
     @State private var detail: ServiceGroup?
     @State private var detailInterval: DateInterval?
-    @Environment(\.colorScheme) private var scheme
-    private var accent: Color { scheme == .dark ? Color(red: 0.66, green: 0.60, blue: 0.94) : Color(red: 0.47, green: 0.39, blue: 0.77) }
+    @State private var detailSourceIDs: Set<Service> = []
+    private var accent: Color { CategoryPalette.color(.purple) }
     private var interval: DateInterval { period.interval(containing: date) }
 
     var body: some View {
@@ -33,27 +39,30 @@ struct Dashboard: View {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red).font(.callout).padding(16).textSelection(.enabled)
                 }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        if section == .overview {
-                            periodControls
-                            let sources = tracker.sources.filter(\.isDistracting)
-                            let report = PeriodActivity(ledger: tracker.ledger, coverage: tracker.coverage,
-                                                        period: period, date: date, includedServices: Set(sources.map(\.id)))
-                            OverviewView(report: report, ledger: tracker.ledger, sources: sources, accent: accent,
-                                         onSelect: showDetail, onShowServices: {
-                                section = .services; search = ""
-                            })
-                        } else {
-                            ServicesView(groups: ServiceGrouping.groups(from: tracker.sources), search: $search,
-                                         accent: accent, onSetDistracting: { group, enabled in
-                                tracker.setDistracting(groupID: group.id, enabled: enabled)
-                            })
+                if section == .settings {
+                    PreferencesView(tracker: tracker, selection: $settingsSection)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 28) {
+                            if section == .overview {
+                                periodControls
+                                let sources = tracker.sources
+                                let included = tracker.categories.includedSourceIDs(sources: sources, recordedIDs: Set(tracker.ledger.visits.map(\.service)))
+                                let report = PeriodActivity(ledger: tracker.ledger, coverage: tracker.coverage,
+                                                            period: period, date: date, includedServices: included)
+                                OverviewView(report: report, ledger: tracker.ledger, sources: sources, catalog: tracker.categories, accent: accent,
+                                             onSelectCategories: tracker.selectCategories,
+                                             onSelect: showDetail, onShowServices: {
+                                    section = .services; search = ""
+                                })
+                            } else {
+                                ServicesView(tracker: tracker, groups: ServiceGrouping.groups(from: tracker.sources), search: $search)
+                            }
                         }
-                    }
-                    .frame(maxWidth: AppLayout.contentWidth)
-                    .padding(AppLayout.pageInset)
-                    .frame(maxWidth: .infinity)
+                        .frame(maxWidth: AppLayout.contentWidth)
+                        .padding(AppLayout.pageInset)
+                        .frame(maxWidth: .infinity)
+                    }.id(section)
                 }
             }.background(Color(nsColor: .controlBackgroundColor))
         }
@@ -62,21 +71,27 @@ struct Dashboard: View {
         .overlay {
             if dialogIsPresented { DialogOverlay(width: dialogWidth, dismiss: dismissDialog) { dialogContent } }
         }
+        .onChange(of: section) { _ in
+            showingCalendar = false
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
         .onChange(of: dialogIsPresented) { presented in
             if presented { showingCalendar = false; NSApp.keyWindow?.makeFirstResponder(nil) }
         }
     }
 
-    private func showDetail(_ group: ServiceGroup, interval: DateInterval) { detail = group; detailInterval = interval }
-    private var dialogIsPresented: Bool { showingSettings || showingAdd || detail != nil || tracker.actionError != nil }
+    private func showDetail(_ group: ServiceGroup, interval: DateInterval) {
+        detail = group; detailInterval = interval
+        detailSourceIDs = tracker.categories.includedSourceIDs(sources: tracker.sources, recordedIDs: Set(tracker.ledger.visits.map(\.service)))
+    }
+    private var dialogIsPresented: Bool { showingAdd || detail != nil || tracker.actionError != nil }
     private var dialogWidth: CGFloat {
         if tracker.actionError != nil { return 430 }
-        if showingSettings { return 490 }
         return showingAdd ? 430 : 560
     }
     private func dismissDialog() {
         if tracker.actionError != nil { tracker.actionError = nil; return }
-        showingSettings = false; showingAdd = false; detail = nil; detailInterval = nil
+        showingAdd = false; detail = nil; detailInterval = nil
     }
     @ViewBuilder private var dialogContent: some View {
         if let error = tracker.actionError {
@@ -84,12 +99,10 @@ struct Dashboard: View {
                 HStack { Text("Could not complete action").font(AppType.dialogTitle); Spacer(); DialogCloseButton(action: dismissDialog) }
                 Text(error).foregroundStyle(.secondary).textSelection(.enabled)
             }.padding(AppLayout.pageInset).frame(width: 430)
-        } else if showingSettings {
-            PreferencesView(tracker: tracker, dismiss: dismissDialog)
         } else if showingAdd {
             AddSourceView(tracker: tracker, dismiss: dismissDialog)
         } else if let group = detail {
-            VisitDetail(tracker: tracker, group: group, day: detailInterval ?? interval, dismiss: dismissDialog)
+            VisitDetail(tracker: tracker, group: group, day: detailInterval ?? interval, includedServices: detailSourceIDs, dismiss: dismissDialog)
         }
     }
     private var sidebar: some View {
@@ -99,7 +112,7 @@ struct Dashboard: View {
                 Text("FocusTrace").font(AppType.title)
             }.padding(.horizontal, 8).frame(height: AppLayout.toolbarHeight)
             VStack(spacing: 4) {
-                ForEach(DashboardSection.allCases, id: \.self) { item in
+                ForEach([DashboardSection.overview, .services], id: \.self) { item in
                     Button { section = item; search = "" } label: {
                         SidebarLabel(title: item.rawValue, icon: item.icon)
                             .font(.system(size: 13, weight: section == item ? .medium : .regular))
@@ -108,8 +121,11 @@ struct Dashboard: View {
                 }
             }.padding(.top, 12)
             Spacer(minLength: AppLayout.sectionGap)
-            Button { showingSettings = true } label: { SidebarLabel(title: "Settings", icon: "gearshape").font(AppType.body) }
-                .buttonStyle(QuietButtonStyle()).keyboardShortcut(",", modifiers: .command)
+            Button { section = .settings } label: {
+                SidebarLabel(title: "Settings", icon: "gearshape")
+                    .font(.system(size: 13, weight: section == .settings ? .medium : .regular))
+            }.buttonStyle(.plain).keyboardShortcut(",", modifiers: .command)
+                .accessibilityAddTraits(section == .settings ? .isSelected : [])
         }
         .padding(.horizontal, 12).padding(.bottom, 12).frame(width: 160)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -118,15 +134,14 @@ struct Dashboard: View {
         HStack(spacing: 12) {
             Text(section.rawValue).font(AppType.title)
             Spacer()
-            Menu {
-                if section == .services {
-                    Button("Add distraction…") { showingAdd = true }.keyboardShortcut("n", modifiers: .command)
-                    Divider()
-                }
-                Button("Export all records…", action: tracker.exportCSV)
-            } label: {
-                Image(systemName: "ellipsis").frame(width: AppLayout.controlHeight, height: AppLayout.controlHeight).contentShape(Rectangle())
-            }.menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize().accessibilityLabel("More options")
+            if section == .services {
+                Menu {
+                    Button("Add service…") { showingAdd = true }.keyboardShortcut("n", modifiers: .command)
+                    Button("Manage categories…") { settingsSection = .categories; section = .settings }
+                } label: {
+                    Image(systemName: "ellipsis").frame(width: AppLayout.controlHeight, height: AppLayout.controlHeight).contentShape(Rectangle())
+                }.menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize().accessibilityLabel("More options")
+            }
         }
         .font(AppType.body).frame(maxWidth: AppLayout.contentWidth).padding(.horizontal, AppLayout.pageInset)
         .frame(maxWidth: .infinity).frame(height: AppLayout.toolbarHeight)

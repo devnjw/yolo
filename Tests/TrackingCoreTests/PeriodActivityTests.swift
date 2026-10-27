@@ -113,4 +113,66 @@ final class PeriodActivityTests: XCTestCase {
         try store.saveCoverage(coverage)
         XCTAssertEqual(try store.loadCoverage(), coverage)
     }
+
+    func testCategoryStacksMatchEveryBinTotalAcrossAllPeriodsAndSelectedCategories() throws {
+        var catalog = CategoryCatalog()
+        try catalog.assign("communication", to: ServiceGrouping.identity(for: Source.defaults[0]))
+        try catalog.assign("entertainment", to: ServiceGrouping.identity(for: Source.defaults[3]))
+        let visits = [visit(19, seconds: 120), visit(19, service: .kakao, seconds: 60),
+                      visit(20, seconds: 180), visit(25, service: .kakao, seconds: 90)]
+        let members = catalog.members(sources: Source.defaults)
+        for filter: Set<String>? in [nil, ["entertainment"]] {
+            try catalog.select(filter)
+            for period in ActivityPeriod.allCases {
+                let result = PeriodActivity(ledger: Ledger(visits: visits), period: period, date: date(25),
+                                            now: date(25, hour: 18), includedServices: catalog.includedSourceIDs(sources: Source.defaults), calendar: calendar)
+                for bin in result.bins {
+                    let segments = bin.categorySegments(catalog.visibleCategories, members: members)
+                    XCTAssertEqual(segments.reduce(0) { $0 + $1.seconds }, bin.seconds ?? 0, accuracy: 0.0001)
+                    XCTAssertEqual(segments.first?.startSeconds ?? 0, 0)
+                    for (left, right) in zip(segments, segments.dropFirst()) {
+                        XCTAssertEqual(left.endSeconds, right.startSeconds)
+                    }
+                    if filter != nil { XCTAssertTrue(segments.allSatisfy { $0.category.id == "entertainment" }) }
+                }
+            }
+        }
+    }
+
+    func testCategoryStackSharesMonthlyAverageDenominatorAndKeepsStableCategoryOrder() throws {
+        var catalog = CategoryCatalog()
+        try catalog.assign("communication", to: ServiceGrouping.identity(for: Source.defaults[0]))
+        try catalog.assign("entertainment", to: ServiceGrouping.identity(for: Source.defaults[3]))
+        var coverage = RecordingCoverage()
+        coverage.observe(at: date(21))
+        let visits = [visit(19, seconds: 120), visit(20, service: .kakao, seconds: 60), visit(25, seconds: 600)]
+        let result = PeriodActivity(ledger: Ledger(visits: visits), coverage: coverage, period: .year,
+                                    date: date(25), now: date(25, hour: 18), includedServices: [.youtube, .kakao], calendar: calendar)
+        let october = result.bins[9]
+        let segments = october.categorySegments(catalog.options, members: catalog.members(sources: Source.defaults))
+        XCTAssertEqual(october.denominator, 3)
+        XCTAssertEqual(october.seconds, 60)
+        XCTAssertEqual(segments.map(\.category.id), ["communication", "entertainment"])
+        XCTAssertEqual(segments.map(\.seconds), [20, 40])
+        XCTAssertEqual(segments.map(\.startSeconds), [0, 20])
+        XCTAssertEqual(segments.map(\.endSeconds), [20, 60])
+        XCTAssertTrue(result.bins[10].categorySegments(catalog.options, members: catalog.members(sources: Source.defaults)).isEmpty)
+        XCTAssertNil(result.bins[0].seconds)
+        XCTAssertTrue(result.bins[0].sourceSeconds.isEmpty)
+    }
+
+    func testCategoryStackUsesExactReportSnapshotWhenVisitCrossesHourBoundary() throws {
+        let start = date(25, hour: 12)
+        let visit = Visit(service: .youtube, start: start.addingTimeInterval(-10), end: start.addingTimeInterval(30))
+        let result = PeriodActivity(ledger: Ledger(visits: [visit]), period: .day, date: start,
+                                    now: start.addingTimeInterval(10), includedServices: [.youtube], calendar: calendar)
+        let catalog = CategoryCatalog()
+        let members = catalog.members(sources: Source.defaults)
+        XCTAssertEqual(result.bins[11].categorySegments(catalog.options, members: members).first?.seconds, 10)
+        XCTAssertEqual(result.bins[12].categorySegments(catalog.options, members: members).first?.seconds, 10)
+        XCTAssertEqual(result.bins[12].sourceSeconds[.youtube], 10)
+        XCTAssertTrue(result.bins[13].categorySegments(catalog.options, members: members).isEmpty)
+        XCTAssertEqual(result.bins[10].seconds, 0)
+        XCTAssertTrue(result.bins[10].categorySegments(catalog.options, members: members).isEmpty)
+    }
 }

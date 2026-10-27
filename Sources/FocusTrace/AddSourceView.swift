@@ -15,11 +15,11 @@ struct AddSourceView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text("Add distraction").font(AppType.dialogTitle)
+                Text("Add service").font(AppType.dialogTitle)
                 Spacer()
                 DialogCloseButton(action: dismiss)
             }
-            Text("All apps and sites are recorded automatically. Add a service here to mark it as distracting before you use it.")
+            Text("Services appear automatically as you use them. You can also add one ahead of time.")
                 .font(.callout).foregroundStyle(.secondary)
             Picker("Type", selection: $kind) {
                 Text("Website").tag(Source.Kind.website)
@@ -49,7 +49,7 @@ struct AddSourceView: View {
             if let error { Text(error).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Spacer()
-                Button("Add distraction", action: add).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                Button("Add service", action: add).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
                     .disabled(kind == .website ? domain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty : appURL == nil)
             }
         }

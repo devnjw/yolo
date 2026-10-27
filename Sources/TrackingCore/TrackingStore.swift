@@ -7,6 +7,7 @@ public struct TrackingStore {
     public var visitsURL: URL { directory.appendingPathComponent("visits.json") }
     public var sourcesURL: URL { directory.appendingPathComponent("sources.json") }
     public var coverageURL: URL { directory.appendingPathComponent("coverage.json") }
+    public var categoriesURL: URL { directory.appendingPathComponent("categories.json") }
 
     public init(directory: URL) { self.directory = directory }
 
@@ -24,6 +25,13 @@ public struct TrackingStore {
         try read(RecordingCoverage.self, from: coverageURL) ?? RecordingCoverage()
     }
     public func saveCoverage(_ coverage: RecordingCoverage) throws { try write(coverage, to: coverageURL) }
+
+    public func loadCategories(legacySources: [Source]) throws -> CategoryCatalog {
+        var catalog = try read(CategoryCatalog.self, from: categoriesURL) ?? CategoryCatalog()
+        catalog.applyServiceDefaults(to: legacySources)
+        return catalog
+    }
+    public func saveCategories(_ catalog: CategoryCatalog) throws { try write(catalog, to: categoriesURL) }
 
     private func read<Value: Decodable>(_ type: Value.Type, from url: URL) throws -> Value? {
         do {

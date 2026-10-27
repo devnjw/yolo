@@ -80,4 +80,30 @@ final class TrackingStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.saveVisits([]))
         XCTAssertEqual(try Data(contentsOf: directory), original)
     }
+
+    func testCategoryMigrationRunsOnceAndDeletedDefaultsDoNotReturn() throws {
+        let fresh = try store.loadCategories(legacySources: Source.defaults)
+        XCTAssertEqual(fresh.categories.count, 6)
+        try store.saveSources(Source.defaults)
+        var migrated = try store.loadCategories(legacySources: Source.defaults)
+        XCTAssertEqual(migrated.category(for: ServiceGrouping.identity(for: Source.defaults.last!)).name, "Entertainment")
+        for category in migrated.categories { try migrated.remove(category.id) }
+        try store.saveCategories(migrated)
+        XCTAssertEqual(try store.loadCategories(legacySources: Source.defaults), migrated)
+        XCTAssertEqual(try store.loadSources(), Source.defaults)
+        let attributes = try FileManager.default.attributesOfItem(atPath: store.categoriesURL.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+    }
+
+    func testMalformedCategoryDataThrowsWithoutResettingOrOverwritingIt() throws {
+        try store.saveSources(Source.defaults)
+        let broken = Data("{broken".utf8)
+        try broken.write(to: store.categoriesURL)
+        XCTAssertThrowsError(try store.loadCategories(legacySources: Source.defaults))
+        XCTAssertEqual(try Data(contentsOf: store.categoriesURL), broken)
+        let invalid = Data("{\"categories\":[],\"assignments\":{\"group\":\"missing\"}}".utf8)
+        try invalid.write(to: store.categoriesURL)
+        XCTAssertThrowsError(try store.loadCategories(legacySources: Source.defaults))
+        XCTAssertEqual(try Data(contentsOf: store.categoriesURL), invalid)
+    }
 }

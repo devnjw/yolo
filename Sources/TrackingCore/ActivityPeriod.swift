@@ -41,6 +41,28 @@ public struct PeriodActivity {
         public let seconds: Double?
         public let denominator: Int
         public let isFuture: Bool
+        /// Uses the same clipping and denominator as the total above.
+        public let sourceSeconds: [Service: Double]
+
+        public struct CategorySegment: Identifiable {
+            public let category: ActivityCategory
+            public let startSeconds: Double
+            public let endSeconds: Double
+            public var id: String { category.id }
+            public var seconds: Double { endSeconds - startSeconds }
+        }
+
+        public func categorySegments(_ categories: [ActivityCategory], members: [String: Set<Service>]) -> [CategorySegment] {
+            guard seconds != nil, !isFuture else { return [] }
+            var offset = 0.0
+            return categories.compactMap { category in
+                let duration = (members[category.id] ?? []).reduce(0.0) { $0 + (sourceSeconds[$1] ?? 0) }
+                guard duration > 0 else { return nil }
+                let start = offset
+                offset += duration
+                return CategorySegment(category: category, startSeconds: start, endSeconds: offset)
+            }
+        }
     }
 
     public let period: ActivityPeriod
@@ -93,10 +115,12 @@ public struct PeriodActivity {
             let available = !future && (period == .year ? denominator > 0 : known(period == .day ? range : binRange))
             let clippedEnd = period == .year ? min(end, today) : min(end, now)
             let clipped = DateInterval(start: cursor, end: max(cursor, clippedEnd))
-            let stats = DayActivity(ledger: ledger, interval: clipped, includedServices: includedServices).statistics
+            let binActivity = DayActivity(ledger: ledger, interval: clipped, includedServices: includedServices)
+            let divisor = Double(max(1, denominator))
             result.append(Bin(id: result.count, interval: binRange,
-                              seconds: available ? stats.seconds / Double(max(1, denominator)) : nil,
-                              denominator: denominator, isFuture: future))
+                              seconds: available ? binActivity.statistics.seconds / divisor : nil,
+                              denominator: denominator, isFuture: future,
+                              sourceSeconds: available ? binActivity.sources.mapValues { $0.statistics.seconds / divisor } : [:]))
             cursor = end
         }
         bins = result
