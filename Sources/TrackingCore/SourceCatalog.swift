@@ -16,14 +16,11 @@ public enum SourceCatalog {
         if host.hasSuffix(".") { host.removeLast() }
         if host.hasPrefix("www.") { host = String(host.dropFirst(4)) }
         guard !host.isEmpty else { return nil }
-        let catalog = sources.map { source -> Source in
-            var source = source
-            source.archived = false
-            return source
-        }
-        if let id = Source.matchWebsite(url, sources: catalog),
-           let source = sources.first(where: { $0.id == id }) { return source }
+        // Resolve the observed host before any explicit alias. A parent domain
+        // must not absorb newly discovered services such as meet.google.com.
+        // Known services can still combine sources in the presentation layer.
         return sources.first { $0.kind == .website && $0.identifier == host }
+            ?? sources.first { $0.kind == .website && $0.aliases.contains(host) }
             ?? Source(name: host, kind: .website, identifier: host)
     }
 }

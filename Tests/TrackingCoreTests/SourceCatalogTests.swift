@@ -45,6 +45,59 @@ final class SourceCatalogTests: XCTestCase {
         XCTAssertEqual(SourceCatalog.website(url: "https://example.com.evil.test/", sources: [parent])?.identifier, "example.com.evil.test")
     }
 
+    func testParentDomainDoesNotAbsorbGoogleServicesAndVisitsStaySeparate() throws {
+        let google = Source(name: "Google", kind: .website, identifier: "google.com")
+        var sources = [google]
+        for host in ["meet.google.com", "mail.google.com", "drive.google.com", "docs.google.com"] {
+            let source = try XCTUnwrap(SourceCatalog.website(url: "https://\(host)/private?token=secret", sources: sources))
+            XCTAssertEqual(source.identifier, host)
+            XCTAssertNotEqual(source.id, google.id)
+            sources.append(source)
+            let saved = try JSONDecoder().decode([Source].self, from: JSONEncoder().encode(sources))
+            XCTAssertEqual(SourceCatalog.website(url: "https://\(host)/next", sources: saved)?.id, source.id)
+        }
+        let meet = sources[1]
+        var categories = CategoryCatalog()
+        categories.applyServiceDefaults(to: sources)
+        XCTAssertEqual(categories.category(for: ServiceGrouping.identity(for: meet)).id, "communication")
+        XCTAssertNotEqual(ServiceGrouping.identity(for: meet), ServiceGrouping.identity(for: google))
+
+        var ledger = Ledger()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        ledger.observe(google.id, at: start)
+        ledger.observe(meet.id, at: start.addingTimeInterval(2))
+        ledger.stop(at: start.addingTimeInterval(4))
+        XCTAssertEqual(ledger.visits.map(\.service), [google.id, meet.id])
+        XCTAssertEqual(ledger.visits.map(\.duration), [2, 2])
+    }
+
+    func testHostDiscoveryIsIndependentOfParentRegistrationOrder() throws {
+        let parent = Source(name: "Example", kind: .website, identifier: "example.com", archived: true)
+        let child = try XCTUnwrap(SourceCatalog.website(url: "https://work.example.com", sources: [parent]))
+        XCTAssertEqual(child.identifier, "work.example.com")
+        XCTAssertNotEqual(child.id, parent.id)
+        XCTAssertEqual(SourceCatalog.website(url: "https://example.com", sources: [child, parent])?.id, parent.id)
+        XCTAssertEqual(SourceCatalog.website(url: "https://WWW.Work.Example.com./path", sources: [parent, child])?.id, child.id)
+    }
+
+    func testExactHostWinsOverAliasesAndAliasDoesNotAbsorbSubdomains() throws {
+        let parent = Source(name: "Example", kind: .website, identifier: "example.com", aliases: ["work.example.com", "short.test"])
+        let child = Source(name: "Work", kind: .website, identifier: "work.example.com", archived: true)
+        XCTAssertEqual(SourceCatalog.website(url: "https://work.example.com", sources: [parent, child])?.id, child.id)
+        XCTAssertEqual(SourceCatalog.website(url: "https://short.test/path", sources: [parent])?.id, parent.id)
+        XCTAssertEqual(SourceCatalog.website(url: "https://app.short.test/path", sources: [parent])?.identifier, "app.short.test")
+    }
+
+    func testKnownServiceGroupingStillCombinesDistinctHosts() throws {
+        let youtube = try XCTUnwrap(Source.defaults.first { $0.id == .youtube })
+        let mobile = try XCTUnwrap(SourceCatalog.website(url: "https://m.youtube.com/watch?v=private", sources: [youtube]))
+        XCTAssertEqual(mobile.identifier, "m.youtube.com")
+        XCTAssertNotEqual(mobile.id, youtube.id)
+        let groups = ServiceGrouping.groups(from: [youtube, mobile])
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.sourceIDs, Set([youtube.id, mobile.id]))
+    }
+
     func testLegacyWatchlistMigratesWithoutChangingIDsAndRemovedItemsRemainUnselected() throws {
         let json = Data("""
         [{"id":"kakao","name":"KakaoTalk","kind":"app","identifier":"com.kakao.KakaoTalkMac","aliases":[],"archived":false},

@@ -29,7 +29,7 @@ struct AddSourceView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Domain").font(.callout)
                     TextField("reddit.com", text: $domain).textFieldStyle(.roundedBorder).focused($domainFocused)
-                    Text("Includes subdomains.").font(AppType.caption).foregroundStyle(.secondary)
+                    Text("Subdomains are recorded separately.").font(AppType.caption).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Name (optional)").font(.callout)
