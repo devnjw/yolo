@@ -29,7 +29,7 @@ struct PreferencesView: View {
                 Spacer(minLength: 0)
             }.overlay(alignment: .bottom) { Divider() }
                 .frame(maxWidth: AppLayout.contentWidth, alignment: .leading)
-                .padding(.horizontal, AppLayout.pageInset).padding(.top, 12)
+                .padding(.horizontal, AppLayout.pageInset).padding(.top, 8)
                 .frame(maxWidth: .infinity)
             ScrollView {
                 Group {

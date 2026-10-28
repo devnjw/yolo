@@ -4,12 +4,20 @@ import SwiftUI
 @main struct FocusTraceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var tracker = Tracker.shared
+    @AppStorage("sidebarVisible") private var sidebarVisible = true
     var body: some Scene {
         Window("FocusTrace", id: "dashboard") {
             DashboardScene(tracker: tracker, delegate: delegate)
         }
             .defaultSize(width: 980, height: 720)
             .windowStyle(.hiddenTitleBar)
+            .windowToolbarStyle(.unifiedCompact)
+            .commands {
+                CommandGroup(after: .sidebar) {
+                    Button(sidebarVisible ? "Hide Sidebar" : "Show Sidebar") { sidebarVisible.toggle() }
+                        .keyboardShortcut("s", modifiers: [.command, .control])
+                }
+            }
         MenuBarExtra {
             MenuContent(tracker: tracker)
         } label: {

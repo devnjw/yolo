@@ -175,4 +175,39 @@ final class PeriodActivityTests: XCTestCase {
         XCTAssertEqual(result.bins[10].seconds, 0)
         XCTAssertTrue(result.bins[10].categorySegments(catalog.options, members: members).isEmpty)
     }
+
+    func testServiceFilteringPreservesEvidenceAndDenominatorsAcrossPeriods() {
+        var coverage = RecordingCoverage()
+        coverage.observe(at: date(21))
+        let visits = [visit(19, seconds: 120), visit(20, service: .kakao, seconds: 60),
+                      visit(25, seconds: 600), visit(25, service: .kakao, seconds: 90)]
+        for period in ActivityPeriod.allCases {
+            let combined = PeriodActivity(ledger: Ledger(visits: visits), coverage: coverage,
+                                          period: period, date: date(25), now: date(25, hour: 18),
+                                          includedServices: [.youtube, .kakao], calendar: calendar)
+            let service = report(visits, period: period, coverage: coverage)
+            for (original, expected) in zip(combined.bins, service.bins) {
+                let filtered = original.filtered(to: [.youtube])
+                XCTAssertEqual(filtered.seconds, expected.seconds)
+                XCTAssertEqual(filtered.sourceSeconds, expected.sourceSeconds)
+                XCTAssertEqual(filtered.interval, original.interval)
+                XCTAssertEqual(filtered.id, original.id)
+                XCTAssertEqual(filtered.denominator, original.denominator)
+                XCTAssertEqual(filtered.isFuture, original.isFuture)
+                XCTAssertEqual(original.filtered(to: [.youtube, .kakao]).seconds, original.seconds)
+                XCTAssertEqual(original.filtered(to: []).seconds, original.seconds.map { _ in 0 })
+            }
+        }
+    }
+
+    func testServiceFilteringKeepsClippedLiveHourSnapshot() {
+        let start = date(25, hour: 12)
+        let entry = Visit(service: .youtube, start: start.addingTimeInterval(-10), end: start.addingTimeInterval(30))
+        let result = PeriodActivity(ledger: Ledger(visits: [entry]), period: .day, date: start,
+                                    now: start.addingTimeInterval(10), includedServices: [.youtube, .kakao], calendar: calendar)
+        XCTAssertEqual(result.bins[11].filtered(to: [.youtube]).seconds, 10)
+        XCTAssertEqual(result.bins[12].filtered(to: [.youtube]).seconds, 10)
+        XCTAssertEqual(result.bins[12].filtered(to: [.kakao]).seconds, 0)
+        XCTAssertNil(result.bins[13].filtered(to: [.youtube]).seconds)
+    }
 }

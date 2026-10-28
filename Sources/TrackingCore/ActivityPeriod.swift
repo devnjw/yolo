@@ -44,6 +44,14 @@ public struct PeriodActivity {
         /// Uses the same clipping and denominator as the total above.
         public let sourceSeconds: [Service: Double]
 
+        /// Narrow an existing snapshot without changing recording evidence or its average denominator.
+        public func filtered(to services: Set<Service>) -> Bin {
+            let filteredSeconds = sourceSeconds.filter { services.contains($0.key) }
+            return Bin(id: id, interval: interval,
+                       seconds: seconds.map { _ in filteredSeconds.values.reduce(0, +) },
+                       denominator: denominator, isFuture: isFuture, sourceSeconds: filteredSeconds)
+        }
+
         public struct CategorySegment: Identifiable {
             public let category: ActivityCategory
             public let startSeconds: Double

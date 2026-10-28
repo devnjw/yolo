@@ -182,8 +182,10 @@ struct OverviewCategoryPicker: View {
             HStack(spacing: 7) {
                 Text(catalog.selectionName).lineLimit(1).truncationMode(.tail)
                 Image(systemName: "chevron.down").font(.system(size: 10)).foregroundStyle(.secondary)
-            }.font(AppType.label).frame(maxWidth: 245, alignment: .leading).contentShape(Rectangle())
-        }.buttonStyle(.plain).help(catalog.visibleCategories.map(\.name).joined(separator: ", "))
+            }.font(AppType.label).padding(.horizontal, 10)
+                .frame(height: 32).frame(maxWidth: 245, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false).contentShape(Rectangle())
+        }.buttonStyle(QuietButtonStyle()).help(catalog.visibleCategories.map(\.name).joined(separator: ", "))
             .accessibilityLabel("Overview categories").accessibilityValue(catalog.selectionName)
             .popover(isPresented: $showing) {
                 VStack(alignment: .leading, spacing: 10) {

@@ -6,12 +6,21 @@ enum AppLayout {
     static let contentWidth: CGFloat = 1200
     static let sectionGap: CGFloat = 24
     static let controlHeight: CGFloat = 28
-    static let toolbarHeight: CGFloat = 56
-    static let sidebarWidth: CGFloat = 184
+    static let sidebarWidth: CGFloat = 192
     static let columnGap: CGFloat = 16
     static let visitsWidth: CGFloat = 64
     static let usageWidth: CGFloat = 144
     static let rowHeight: CGFloat = 60
+}
+
+enum AppSurface {
+    static let chromeColor = NSColor(name: NSColor.Name("FocusTraceChrome")) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(calibratedWhite: 0.075, alpha: 1)
+            : NSColor(calibratedWhite: 0.95, alpha: 1)
+    }
+    static let chrome = Color(nsColor: chromeColor)
+    static let content = Color(nsColor: .controlBackgroundColor)
 }
 
 enum AppType {
@@ -29,10 +38,12 @@ struct QuietButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .contentShape(Rectangle())
             .opacity(isEnabled ? 1 : 0.35)
             .background {
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.primary.opacity(isEnabled && (hovering || configuration.isPressed) ? 0.07 : 0))
+                    .fill(Color.primary.opacity(isEnabled
+                        ? (configuration.isPressed ? 0.12 : hovering ? 0.08 : 0) : 0))
             }
             .onHover { hovering = $0 }
     }
@@ -41,16 +52,21 @@ struct QuietButtonStyle: ButtonStyle {
 struct SidebarLabel: View {
     let title: String
     let icon: String
+    var selected = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .frame(width: 20)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(selected ? .primary : .secondary)
+                .frame(width: 18)
                 .accessibilityHidden(true)
-            Text(title)
+            Text(title).font(.system(size: 13, weight: selected ? .medium : .regular))
         }
         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
+        .foregroundStyle(selected ? .primary : .secondary)
+        .background(selected ? Color.primary.opacity(0.07) : .clear, in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
     }
 }
