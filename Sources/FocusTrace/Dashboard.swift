@@ -45,16 +45,13 @@ struct Dashboard: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             if section == .overview {
-                                periodControls
                                 let sources = tracker.sources
                                 let included = tracker.categories.includedSourceIDs(sources: sources, recordedIDs: Set(tracker.ledger.visits.map(\.service)))
                                 let report = PeriodActivity(ledger: tracker.ledger, coverage: tracker.coverage,
                                                             period: period, date: date, includedServices: included)
                                 OverviewView(report: report, ledger: tracker.ledger, sources: sources, catalog: tracker.categories, accent: accent,
                                              onSelectCategories: tracker.selectCategories,
-                                             onSelect: showDetail, onShowServices: {
-                                    section = .services; search = ""
-                                })
+                                             onSelect: showDetail)
                             } else {
                                 ServicesView(tracker: tracker, groups: ServiceGrouping.groups(from: tracker.sources), search: $search)
                             }
@@ -134,6 +131,7 @@ struct Dashboard: View {
         HStack(spacing: 12) {
             Text(section.rawValue).font(AppType.title)
             Spacer()
+            if section == .overview { periodControls }
             if section == .services {
                 Menu {
                     Button("Add service…") { showingAdd = true }.keyboardShortcut("n", modifiers: .command)
@@ -147,30 +145,27 @@ struct Dashboard: View {
         .frame(maxWidth: .infinity).frame(height: AppLayout.toolbarHeight)
     }
     private var periodControls: some View {
-        HStack {
+        HStack(spacing: 16) {
             Picker("Time range", selection: $period) {
                 ForEach(ActivityPeriod.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented).labelsHidden().frame(width: 242)
-            Spacer(minLength: 16)
+            }.pickerStyle(.menu).labelsHidden().tint(.gray).frame(width: 86)
             HStack(spacing: 3) {
                 Button { movePeriod(-1) } label: {
                     Image(systemName: "chevron.left").frame(width: 28, height: 28).contentShape(Rectangle())
                 }.help("Previous \(period.rawValue.lowercased())").accessibilityLabel("Previous period")
                 Button { showingCalendar.toggle() } label: {
-                    Text(periodLabel).monospacedDigit().frame(minWidth: 104, minHeight: 28).contentShape(Rectangle())
+                    Text(periodLabel).monospacedDigit().lineLimit(1).frame(width: 146, height: 28).contentShape(Rectangle())
                 }.popover(isPresented: $showingCalendar) {
-                    VStack(spacing: 12) {
-                        HStack { Text("Date").font(AppType.heading); Spacer(); DialogCloseButton { showingCalendar = false } }
-                        DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
-                            .datePickerStyle(.graphical).labelsHidden().fixedSize()
-                        Button("Today") { date = Date(); showingCalendar = false }
-                    }.padding(16).frame(width: 220)
+                    DateSelectionPopover(date: date) { selected in
+                        date = selected
+                        showingCalendar = false
+                    }
                 }
                 Button { movePeriod(1) } label: {
                     Image(systemName: "chevron.right").frame(width: 28, height: 28).contentShape(Rectangle())
                 }.disabled(interval.end > Date()).help("Next \(period.rawValue.lowercased())").accessibilityLabel("Next period")
             }.buttonStyle(QuietButtonStyle()).font(AppType.caption).foregroundStyle(.secondary)
-        }
+        }.fixedSize()
     }
     private var periodLabel: String {
         let english = Locale(identifier: "en_US")

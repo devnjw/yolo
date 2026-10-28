@@ -10,7 +10,6 @@ struct OverviewView: View {
     let accent: Color
     let onSelectCategories: (Set<String>?) -> Void
     let onSelect: (ServiceGroup, DateInterval) -> Void
-    let onShowServices: () -> Void
     @State private var selection: Int?
     @State private var hover: Int?
     @State private var hoverCategory: String?
@@ -39,8 +38,8 @@ struct OverviewView: View {
     private var dailyAverage: Bool { selectedBin == nil ? report.period != .day : report.period == .year }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 32) {
-            HStack(alignment: .firstTextBaseline, spacing: 48) {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(alignment: .top, spacing: 48) {
                 metric("Time", value: overviewTimeLabel(report.seconds), primary: true,
                        help: "Recorded foreground time in the selected categories. " + averageHelp)
                 metric("Visits", value: countLabel(report.visits), primary: false,
@@ -48,9 +47,9 @@ struct OverviewView: View {
                 Spacer(minLength: 0)
             }
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 30) {
-                    timeline.frame(minWidth: 300)
-                    breakdown.frame(minWidth: 280)
+                HStack(alignment: .top, spacing: 32) {
+                    timeline.frame(minWidth: 300, maxWidth: .infinity, alignment: .topLeading)
+                    breakdown.frame(minWidth: 280, maxWidth: .infinity, alignment: .topLeading)
                 }
                 VStack(alignment: .leading, spacing: 26) { timeline; breakdown }
             }
@@ -68,17 +67,17 @@ struct OverviewView: View {
     private func metric(_ title: String, value: String, primary: Bool, help: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if primary {
-                OverviewCategoryPicker(catalog: catalog, onSelect: onSelectCategories)
+                OverviewCategoryPicker(catalog: catalog, onSelect: onSelectCategories).frame(height: 20)
             } else {
                 HStack(spacing: 6) {
                     Text(title).font(AppType.label)
                     Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(.secondary)
-                }.foregroundStyle(.secondary).help(help)
+                }.foregroundStyle(.secondary).frame(height: 20).help(help)
             }
             HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Text(value).font(.system(size: primary ? 43 : 30, weight: .medium)).tracking(primary ? -1 : -0.5)
+                Text(value).font(.system(size: 43, weight: .medium)).tracking(-1)
                 if report.period != .day { Text("/ day").font(.system(size: 15)).foregroundStyle(.secondary) }
-            }.monospacedDigit().frame(height: 52, alignment: .bottom).help(help)
+            }.monospacedDigit().frame(height: 52, alignment: .leading).help(help)
         }.fixedSize(horizontal: true, vertical: false)
     }
 
@@ -96,7 +95,7 @@ struct OverviewView: View {
                         Text("Avg \(overviewTimeLabel(seconds))")
                     }.font(AppType.caption).foregroundStyle(.secondary)
                 }
-            }.frame(height: 26, alignment: .top)
+            }.frame(height: 20, alignment: .top)
             Chart {
                 ForEach(report.bins) { bin in
                     if let seconds = bin.seconds {
@@ -105,6 +104,9 @@ struct OverviewView: View {
                                 BarMark(x: .value("Period", bin.id),
                                         yStart: .value("Start minutes", segment.startSeconds / 60),
                                         yEnd: .value("End minutes", segment.endSeconds / 60))
+                                    .cornerRadius(0)
+                                    .clipShape(StackedBarShape(seconds: segment.seconds, end: segment.endSeconds,
+                                                              total: segments[bin.id]?.last?.endSeconds ?? segment.endSeconds))
                                     .foregroundStyle(segment.category.color.opacity(selection == nil || selection == bin.id ? 1 : 0.3))
                                     .accessibilityLabel(binLabel(bin) + ", " + segment.category.name)
                                     .accessibilityValue(overviewTimeLabel(segment.seconds))
@@ -152,7 +154,7 @@ struct OverviewView: View {
                 }
             }
             .chartYAxis {
-                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                AxisMarks(position: .leading, values: chartTicks) { value in
                     AxisGridLine().foregroundStyle(.secondary.opacity(0.15))
                     AxisValueLabel {
                         if let minutes = value.as(Double.self) { Text("\(Int(minutes))m") }
@@ -182,7 +184,7 @@ struct OverviewView: View {
                         }
                 }
             }
-            .frame(height: 215)
+            .frame(height: 240)
             .accessibilityLabel(report.period == .year ? "Daily average time by month, stacked by category" : "Time by \(report.period == .day ? "hour" : "day"), stacked by category")
             .accessibilityRepresentation {
                 VStack {
@@ -203,8 +205,12 @@ struct OverviewView: View {
         }
     }
 
+    private var chartTicks: AxisMarkValues {
+        report.period == .day ? .stride(by: 30.0) : .automatic(desiredCount: 3)
+    }
     private var chartMaximum: Double {
-        max(30, ceil(max(report.bins.compactMap(\.seconds).max() ?? 0, report.period == .day ? 0 : report.seconds ?? 0) / 60 / 30) * 30)
+        if report.period == .day { return 60 }
+        return max(30, ceil(max(report.bins.compactMap(\.seconds).max() ?? 0, report.seconds ?? 0) / 60 / 30) * 30)
     }
     private var axisIndices: [Int] {
         let count = report.bins.count
@@ -241,26 +247,24 @@ struct OverviewView: View {
     }
 
     private var listHeading: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        HStack(spacing: 12) {
             if let bin = selectedBin {
-                HStack {
-                    Text(binLabel(bin)).font(AppType.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Clear selection") { selection = nil; hover = nil }.buttonStyle(.plain).font(AppType.caption)
-                }.padding(.bottom, 10)
-            }
-            HStack(spacing: 12) {
-                if !showsCategoryBreakdown {
-                    Button { onSelectCategories(nil) } label: {
-                        Label("All categories", systemImage: "chevron.left")
-                    }.buttonStyle(.plain).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(binLabel(bin)).lineLimit(1)
+                    Button { selection = nil; hover = nil } label: {
+                        Image(systemName: "xmark").font(.system(size: 9)).frame(width: 18, height: 18)
+                    }.buttonStyle(QuietButtonStyle()).help("Clear selection").accessibilityLabel("Clear selection")
                 }
-                Spacer(minLength: 0)
-                Text("Time").frame(width: 72, alignment: .trailing)
-                Text("Visits").frame(width: 56, alignment: .trailing)
-            }.font(AppType.caption).foregroundStyle(.secondary).frame(height: 26, alignment: .top)
-                .help(dailyAverage ? "Daily averages across recorded days in the selected range." : "Totals for the selected period.")
-        }
+            } else if !showsCategoryBreakdown {
+                Button { onSelectCategories(nil) } label: {
+                    Label("All categories", systemImage: "chevron.left")
+                }.buttonStyle(.plain).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text("Time").frame(width: 72, alignment: .trailing)
+            Text("Visits").frame(width: 56, alignment: .trailing)
+        }.font(AppType.caption).foregroundStyle(.secondary).frame(height: 20, alignment: .top)
+            .help(dailyAverage ? "Daily averages across recorded days in the selected range." : "Totals for the selected period.")
     }
 
     private var categoryRanking: some View {
@@ -286,13 +290,10 @@ struct OverviewView: View {
                         }.font(AppType.caption).monospacedDigit()
                         UsageBar(fraction: maximum > 0 ? stats.seconds / maximum : 0, color: category.color)
                             .frame(height: 4).padding(.leading, 13)
-                    }.padding(.vertical, 12).contentShape(Rectangle())
+                    }.padding(.top, category.id == rows.first?.id ? 0 : 8).padding(.bottom, 8).contentShape(Rectangle())
                 }.buttonStyle(QuietButtonStyle()).accessibilityHint("Show services in \(category.name)")
                 Divider().opacity(0.6)
             }
-            Button(action: onShowServices) {
-                Label("Manage services", systemImage: "arrow.up.right").font(AppType.caption).foregroundStyle(.secondary).padding(.vertical, 14)
-            }.buttonStyle(.plain)
         }
     }
 
@@ -311,16 +312,19 @@ struct OverviewView: View {
             ForEach(rows) { source in
                 let stats = activity.statistics(for: source.sourceIDs)
                 Button { onSelect(source, listInterval) } label: {
-                    VStack(spacing: 9) {
-                        HStack(spacing: 12) {
-                            SourceIcon(source: source.representative, size: 24)
-                            Text(source.name).font(AppType.body).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                            Text(overviewTimeLabel(stats.seconds / divisor)).fixedSize().frame(width: 72, alignment: .trailing)
-                            Text(countLabel(Double(stats.visits) / divisor)).fixedSize().foregroundStyle(.secondary).frame(width: 56, alignment: .trailing)
-                        }.font(AppType.caption).monospacedDigit()
-                        UsageBar(fraction: maximum > 0 ? stats.seconds / maximum : 0, color: catalog.visibleCategories.first?.color ?? accent)
-                            .frame(height: 4).padding(.leading, 36)
-                    }.padding(.vertical, 12).contentShape(Rectangle())
+                    HStack(alignment: .center, spacing: 12) {
+                        SourceIcon(source: source.representative, size: 24).frame(width: 32)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 12) {
+                                Text(source.name).font(AppType.body).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                                Text(overviewTimeLabel(stats.seconds / divisor)).fixedSize().frame(width: 72, alignment: .trailing)
+                                Text(countLabel(Double(stats.visits) / divisor)).fixedSize().foregroundStyle(.secondary).frame(width: 56, alignment: .trailing)
+                            }.font(AppType.caption).monospacedDigit().frame(minHeight: 20)
+                            UsageBar(fraction: maximum > 0 ? stats.seconds / maximum : 0, color: catalog.visibleCategories.first?.color ?? accent)
+                                .frame(height: 4)
+                        }
+                    }.frame(minHeight: 36)
+                        .padding(.top, source.id == rows.first?.id ? 0 : 8).padding(.bottom, 8).contentShape(Rectangle())
                 }.buttonStyle(QuietButtonStyle())
                     .accessibilityLabel("\(source.name), \(overviewTimeLabel(stats.seconds / divisor)), \(countLabel(Double(stats.visits) / divisor)) visits\(dailyAverage ? " per day" : "")")
                 Divider().opacity(0.6)
@@ -329,11 +333,31 @@ struct OverviewView: View {
                 Text((selectedBin.map { $0.seconds != nil } ?? report.hasData) ? "No activity recorded in this category." : "No data for this period.")
                     .font(AppType.body).foregroundStyle(.secondary).padding(.vertical, 24)
             }
-            Button(action: onShowServices) {
-                HStack(spacing: 5) { Text("Manage services"); Image(systemName: "arrow.up.right") }
-                    .font(AppType.caption).foregroundStyle(.secondary).padding(.vertical, 14)
-            }.buttonStyle(.plain)
         }
+    }
+}
+
+/// Clip each segment against the whole stack, so even a very thin top segment
+/// shares the same rounded cap. Interior joins and the baseline stay square.
+private struct StackedBarShape: Shape {
+    let seconds: Double
+    let end: Double
+    let total: Double
+
+    func path(in bounds: CGRect) -> Path {
+        let scale = bounds.height / seconds
+        let rect = CGRect(x: bounds.minX, y: bounds.minY - (total - end) * scale,
+                          width: bounds.width, height: total * scale)
+        let r = min(3, rect.width / 2, rect.height)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + r, y: rect.minY), control: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + r), control: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
