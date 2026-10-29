@@ -118,7 +118,9 @@ struct PreferencesView: View {
                         Divider()
                         Button("Open backups folder", action: tracker.openBackupsFolder)
                         Button("Open data folder") { NSWorkspace.shared.open(tracker.dataURL.deletingLastPathComponent()) }
-                    }.disabled(tracker.backupBusy)
+                    }
+                    .tint(.gray).accentColor(.gray)
+                    .disabled(tracker.backupBusy)
                 }
             }.help(tracker.lastAutomaticBackup.map {
                 "Last automatic backup: " + $0.formatted(date: .abbreviated, time: .shortened)
