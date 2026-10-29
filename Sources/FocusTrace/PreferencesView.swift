@@ -103,45 +103,47 @@ struct PreferencesView: View {
 
     private var privacy: some View {
         VStack(alignment: .leading, spacing: 0) {
-            settingRow("Export records", detail: "CSV · all dates and categories") {
-                Button("Export all records…", action: tracker.exportCSV)
+            settingRow("Export records", detail: "All dates and categories") {
+                Button("Export CSV…", action: tracker.exportCSV)
             }
             Divider()
-            settingRow("Local storage", detail: "Records and settings are stored on this Mac.") {
-                Button("Open data folder") { NSWorkspace.shared.open(tracker.dataURL.deletingLastPathComponent()) }
-            }
-            Divider()
-            settingRow("Automatic backups", detail: "Daily · keeps the latest 7 backups. Records, services, categories and tracking settings are included.") {
-                Button("Open backups folder", action: tracker.openBackupsFolder)
-            }
-            if let date = tracker.lastAutomaticBackup {
-                Text("Last automatic backup: " + date.formatted(date: .abbreviated, time: .shortened))
-                    .font(AppType.caption).foregroundStyle(.secondary).padding(.bottom, 12)
-            }
-            Divider()
-            settingRow("Back up or restore", detail: "Restoring saves a recovery copy of your current database first.") {
-                HStack(spacing: 12) {
+            settingRow("Backups", detail: backupDetail) {
+                HStack(spacing: 10) {
                     if tracker.backupBusy { ProgressView().controlSize(.small) }
-                    Button("Back up now…", action: tracker.exportBackup)
-                        .disabled(tracker.backupBusy || tracker.storageError != nil)
-                    Button("Restore backup…", action: tracker.chooseBackupToRestore)
-                        .disabled(!tracker.canRestoreBackup)
+                    Menu("Manage…") {
+                        Button("Back up now…", action: tracker.exportBackup)
+                            .disabled(tracker.storageError != nil)
+                        Button("Restore backup…", action: tracker.chooseBackupToRestore)
+                            .disabled(!tracker.canRestoreBackup)
+                        Divider()
+                        Button("Open backups folder", action: tracker.openBackupsFolder)
+                        Button("Open data folder") { NSWorkspace.shared.open(tracker.dataURL.deletingLastPathComponent()) }
+                    }.disabled(tracker.backupBusy)
                 }
-            }
-            if let message = tracker.backupMessage {
-                Text(message).font(AppType.caption).foregroundStyle(.secondary).padding(.bottom, 12)
-            }
+            }.help(tracker.lastAutomaticBackup.map {
+                "Last automatic backup: " + $0.formatted(date: .abbreviated, time: .shortened)
+            } ?? "Automatic backups keep the latest 7 daily snapshots.")
             if let error = tracker.backupError {
                 Text(error).font(AppType.caption).foregroundStyle(.red).textSelection(.enabled).padding(.bottom, 12)
             }
             Divider()
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Privacy").font(AppType.heading).foregroundStyle(.primary)
-                Text("Only source names and visit times are saved. Page contents, full URLs, and keystrokes are not recorded.")
-                Text("Website icons are downloaded from public sites and cached locally. Browser cookies and visit records are never sent.")
-                Text("Private browsing may be included. Foreground time is an estimate, not a measure of attention.")
-            }.font(AppType.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.top, 20)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Usage records stay on this Mac.")
+                DisclosureGroup("Privacy details") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Page contents, full URLs, and keystrokes are not recorded.")
+                        Text("Website icons are downloaded from public sites. Browser cookies and visit records are never sent.")
+                        Text("Private browsing may be included. Foreground time estimates usage, not attention.")
+                    }.fixedSize(horizontal: false, vertical: true).padding(.top, 8)
+                }
+            }.font(AppType.caption).foregroundStyle(.secondary).padding(.top, 16)
         }
+    }
+
+    private var backupDetail: String {
+        if tracker.restoring { return "Restoring backup…" }
+        if tracker.backupBusy { return "Backing up…" }
+        return tracker.backupMessage ?? "Daily · 7 backups kept"
     }
 
     private func settingRow<Control: View>(_ title: String, detail: String? = nil,

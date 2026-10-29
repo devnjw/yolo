@@ -52,7 +52,18 @@ import UniformTypeIdentifiers
     @Published private(set) var backupBusy = false
     @Published private(set) var restoring = false
     @Published private(set) var lastAutomaticBackup: Date?
-    @Published private(set) var backupMessage: String?
+    private var backupMessageResetTask: Task<Void, Never>?
+    @Published private(set) var backupMessage: String? {
+        didSet {
+            backupMessageResetTask?.cancel()
+            guard backupMessage != nil else { return }
+            backupMessageResetTask = Task { [weak self] in
+                do { try await Task.sleep(nanoseconds: 4_000_000_000) }
+                catch { return }
+                self?.backupMessage = nil
+            }
+        }
+    }
     @Published private(set) var backupError: String?
     var backupsURL: URL { backupRepository.directory }
     var canRestoreBackup: Bool { recordingLease != nil && !backupBusy && !restoring && !finishing }

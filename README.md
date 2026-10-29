@@ -71,7 +71,7 @@ Overview의 누적 막대·목록·카테고리 선택은 Apple Screen Time을 �
 
 ### 백업과 복원
 
-**Settings → Privacy & data**에서 사용할 수 있습니다.
+**Settings → Privacy & data → Backups → Manage…**에서 수동 백업·복원과 폴더 열기를 사용할 수 있습니다. 기본 화면은 내보내기와 백업 상태 두 행으로 표시하며, 개인정보 설명은 **Privacy details**를 펼쳐 확인합니다. 백업 성공 메시지는 4초 뒤 사라지고 마지막 자동 백업 시각은 Backups 행의 도움말에 표시합니다.
 
 - **Automatic backups**: 정상 추적 중 시작 시와 이후 약 한 시간마다 백업 필요 여부를 확인합니다. 로컬 날짜 기준 하루 한 번 만들고 `~/Library/Application Support/FocusTrace Backups/Automatic/`에 최근 7개를 보관합니다. 잠금·잠자기 중에는 추적 재개 후 확인합니다. 새 백업이 완성된 후 자동 백업만 정리하며 수동·복원 직전·이전 형식 백업은 지우지 않습니다.
 - **Back up now…**: 선택한 위치에 단일 `.sqlite3` 파일을 저장합니다. 최신 방문 변경분을 먼저 저장하고 SQLite 백업 API로 사본을 만듭니다. 임시 파일의 DB 무결성·스키마·서비스·카테고리·추적 설정을 검증한 뒤 완성된 파일로 공개합니다. 수동 백업은 자동 정리 대상이 아닙니다.
