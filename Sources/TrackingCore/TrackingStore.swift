@@ -1,7 +1,7 @@
 import Foundation
 
-/// JSON storage shared by the recorder and source catalog. Keep the default
-/// Foundation date encoding and filenames compatible with existing installs.
+/// Legacy JSON compatibility for one-time database imports and older fixtures.
+/// The running app uses RecordingDatabase as its only recording/configuration store.
 public struct TrackingStore {
     public let directory: URL
     public var visitsURL: URL { directory.appendingPathComponent("visits.json") }

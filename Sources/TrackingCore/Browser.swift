@@ -1,6 +1,6 @@
 import Foundation
 
-public enum Browser: String, CaseIterable, Identifiable, Sendable {
+public enum Browser: String, Codable, CaseIterable, Identifiable, Sendable {
     case chrome, safari
     public var id: String { rawValue }
     public var name: String { self == .chrome ? "Chrome" : "Safari" }

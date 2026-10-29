@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import CoreGraphics
 import TrackingCore
+import UniformTypeIdentifiers
 
 @MainActor final class Tracker: ObservableObject {
     static let shared = Tracker()
@@ -17,10 +18,18 @@ import TrackingCore
     @Published var storageError: String?
     @Published var actionError: String?
     @Published var websitesEnabled = false {
-        didSet { UserDefaults.standard.set(websitesEnabled, forKey: "websitesEnabled"); resetBrowser() }
+        didSet {
+            guard !applyingOptions else { return }
+            do { try persistOptions(); resetBrowser() }
+            catch { applyingOptions = true; websitesEnabled = oldValue; applyingOptions = false; actionError = error.localizedDescription }
+        }
     }
     @Published var idleMinutes = 5 {
-        didSet { UserDefaults.standard.set(idleMinutes, forKey: "idleMinutes") }
+        didSet {
+            guard !applyingOptions else { return }
+            do { try persistOptions() }
+            catch { applyingOptions = true; idleMinutes = oldValue; applyingOptions = false; actionError = error.localizedDescription }
+        }
     }
     private var timer: Timer?
     private let browserReader = BrowserTabReader()
@@ -33,36 +42,55 @@ import TrackingCore
     private var lastSave = Date.distantPast
     private var observers: [NSObjectProtocol] = []
     private var distributedObservers: [NSObjectProtocol] = []
-    private let store: TrackingStore
+    private let dataDirectory: URL
+    private let backupRepository: RecordingBackups
+    private let observesSystem: Bool
+    private var finishing = false
+    private var applyingOptions = false
+    private var storageEpoch: UInt64 = 0
+    private var lastAutomaticBackupCheck = Date.distantPast
+    @Published private(set) var backupBusy = false
+    @Published private(set) var restoring = false
+    @Published private(set) var lastAutomaticBackup: Date?
+    @Published private(set) var backupMessage: String?
+    @Published private(set) var backupError: String?
+    var backupsURL: URL { backupRepository.directory }
+    var canRestoreBackup: Bool { recordingLease != nil && !backupBusy && !restoring && !finishing }
+    private var recordingLease: RecordingLease?
     private var recordingWriter: RecordingWriter?
     private var savedVisitCount = 0
     private var savedCoverageCount = 0
     private var saveInFlight = false
     private var saveRequested = false
-    var dataURL: URL { store.directory.appendingPathComponent("recording.sqlite3") }
+    var dataURL: URL { dataDirectory.appendingPathComponent("recording.sqlite3") }
     func source(for id: Service) -> Source? { sources.first { $0.id == id } }
 
-    private init() {
-        store = TrackingStore(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("FocusTrace", isDirectory: true))
-        let defaults = UserDefaults.standard
-        enabledBrowsers = Browser.restoredSelection(saved: defaults.stringArray(forKey: "enabledBrowsers"),
-                                                    legacy: defaults.string(forKey: "browser"))
-        websitesEnabled = defaults.bool(forKey: "websitesEnabled")
-        idleMinutes = defaults.object(forKey: "idleMinutes") == nil ? 5 : defaults.integer(forKey: "idleMinutes")
+    init(directory: URL? = nil, backupDirectory: URL? = nil, defaults: UserDefaults = .standard, observesSystem: Bool = true) {
+        self.observesSystem = observesSystem
+        dataDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FocusTrace", isDirectory: true)
+        backupRepository = RecordingBackups(directory: backupDirectory ?? dataDirectory.deletingLastPathComponent()
+            .appendingPathComponent("FocusTrace Backups", isDirectory: true))
+        let legacyOptions = TrackingOptions(websitesEnabled: defaults.bool(forKey: "websitesEnabled"),
+            enabledBrowsers: Browser.restoredSelection(saved: defaults.stringArray(forKey: "enabledBrowsers"), legacy: defaults.string(forKey: "browser")),
+            idleMinutes: defaults.object(forKey: "idleMinutes") == nil ? 5 : defaults.integer(forKey: "idleMinutes"))
         do {
-            sources = try store.loadSources()
-            categories = try store.loadCategories(legacySources: sources)
-            let database = try RecordingDatabase(directory: store.directory)
-            ledger = Ledger(visits: try database.loadVisits())
-            coverage = try database.loadCoverage()
-            savedVisitCount = ledger.visitCount
-            savedCoverageCount = coverage.intervals.count
+            if observesSystem && NSRunningApplication.runningApplications(withBundleIdentifier: "local.jinwoo.FocusTrace")
+                .contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
+                throw RecordingDatabaseError("Another copy of FocusTrace is running. Quit that copy before opening this version.")
+            }
+            recordingLease = try RecordingLease(directory: dataDirectory)
+            let database = try RecordingDatabase(directory: dataDirectory, legacyOptions: legacyOptions,
+                migrationBackupDirectory: backupRepository.directory.appendingPathComponent("Migrations", isDirectory: true))
+            applySnapshot(try database.loadSnapshot())
             recordingWriter = RecordingWriter(database: database)
-            try store.saveCategories(categories)
-            try store.saveSources(sources)
         } catch {
             storageError = "Could not load or prepare saved data. Tracking stopped to protect your records. \(error.localizedDescription)"
+        }
+        guard observesSystem else {
+            running = storageError == nil
+            status = running ? "Starting" : "Storage error"
+            return
         }
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
@@ -95,6 +123,7 @@ import TrackingCore
     }
 
     func finish() {
+        finishing = true
         running = false
         generation += 1
         ledger.stop(at: Date())
@@ -102,8 +131,8 @@ import TrackingCore
         do {
             // Even after a source/configuration error, drain previously submitted
             // valid writes. Do not add records collected after an error.
-            try recordingWriter.finish(visits: storageError == nil ? ledger.recordsToSave(after: savedVisitCount) : [],
-                                       coverage: storageError == nil ? coverageRecordsToSave() : [])
+            try recordingWriter.finish(visits: storageError == nil && !restoring ? ledger.recordsToSave(after: savedVisitCount) : [],
+                                       coverage: storageError == nil && !restoring ? coverageRecordsToSave() : [])
         } catch { recordingFailed(error) }
     }
 
@@ -116,11 +145,23 @@ import TrackingCore
         if running { ledger.stop(at: Date()); save(); tick() }
     }
 
+    private var trackingOptions: TrackingOptions {
+        TrackingOptions(websitesEnabled: websitesEnabled, enabledBrowsers: enabledBrowsers, idleMinutes: idleMinutes)
+    }
+    private func persistOptions() throws {
+        guard storageError == nil, !restoring, let recordingWriter else { throw SourceInputError("Tracking settings are temporarily unavailable.") }
+        try recordingWriter.saveOptions(trackingOptions)
+    }
     func setBrowser(_ browser: Browser, enabled: Bool) {
-        if enabled { enabledBrowsers.insert(browser) }
-        else { enabledBrowsers.remove(browser) }
-        UserDefaults.standard.set(Browser.allCases.filter(enabledBrowsers.contains).map(\.rawValue), forKey: "enabledBrowsers")
-        resetBrowser(browser)
+        var next = enabledBrowsers
+        if enabled { next.insert(browser) } else { next.remove(browser) }
+        do {
+            guard storageError == nil, !restoring, let recordingWriter else { throw SourceInputError("Tracking settings are temporarily unavailable.") }
+            var options = trackingOptions; options.enabledBrowsers = next
+            try recordingWriter.saveOptions(options)
+            enabledBrowsers = next
+            resetBrowser(browser)
+        } catch { actionError = error.localizedDescription }
     }
 
     private func suspend(_ reason: String) {
@@ -142,9 +183,10 @@ import TrackingCore
     }
 
     private func tick() {
-        guard running, !suspended, storageError == nil else { return }
+        guard observesSystem, !finishing, running, !suspended, storageError == nil else { return }
         let now = Date()
         coverage.observe(at: now)
+        defer { checkAutomaticBackup(at: now) }
         guard !isIdle else {
             generation += 1
             ledger.stop(at: now); status = "Idle"
@@ -237,8 +279,8 @@ import TrackingCore
         return coverage.intervals.indices.dropFirst(first).map { ($0, coverage.intervals[$0]) }
     }
 
-    private func save() {
-        guard storageError == nil, let recordingWriter else { return }
+    func save() {
+        guard storageError == nil, !restoring, !finishing, let recordingWriter else { return }
         // Coalesce requests while disk I/O is pending. Never enqueue snapshots of
         // the entire history, or an unbounded backlog when a disk is slow.
         guard !saveInFlight else { saveRequested = true; return }
@@ -248,9 +290,10 @@ import TrackingCore
         savedCoverageCount = coverage.intervals.count
         lastSave = Date()
         saveInFlight = true
+        let epoch = storageEpoch
         recordingWriter.submit(visits: visits, coverage: intervals) { [weak self] result in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.storageEpoch == epoch else { return }
                 self.saveInFlight = false
                 switch result {
                 case .failure(let error): self.recordingFailed(error)
@@ -334,24 +377,176 @@ import TrackingCore
         try editCategories { try $0.remove(id, movingTo: destination) }
     }
     private func editCategories(_ edit: (inout CategoryCatalog) throws -> Void) throws {
-        guard storageError == nil else { throw CategoryError("Resolve the storage error before editing services or categories.") }
+        guard storageError == nil, !restoring, let recordingWriter else { throw CategoryError("Services and categories are temporarily unavailable.") }
         var next = categories
         try edit(&next)
-        try store.saveCategories(next)
+        try recordingWriter.saveCatalog(sources: sources, categories: next)
         categories = next
     }
 
     private func updateSources(_ next: [Source]) throws {
-        guard storageError == nil else { throw SourceInputError("Resolve the storage error before changing sources.") }
+        guard storageError == nil, !restoring, let recordingWriter else { throw SourceInputError("Services are temporarily unavailable.") }
         var nextCategories = categories
         nextCategories.applyServiceDefaults(to: next)
-        if nextCategories != categories {
-            try store.saveCategories(nextCategories)
-            categories = nextCategories
-        }
-        try store.saveSources(next)
+        try recordingWriter.saveCatalog(sources: next, categories: nextCategories)
+        categories = nextCategories
         generation += 1
         sources = next
+    }
+
+    private func applySnapshot(_ snapshot: RecordingSnapshot) {
+        ledger = Ledger(visits: snapshot.visits)
+        coverage = snapshot.coverage
+        sources = snapshot.sources
+        categories = snapshot.categories
+        applyingOptions = true
+        websitesEnabled = snapshot.options.websitesEnabled
+        enabledBrowsers = snapshot.options.enabledBrowsers
+        idleMinutes = snapshot.options.idleMinutes
+        applyingOptions = false
+        savedVisitCount = ledger.visitCount
+        savedCoverageCount = coverage.intervals.count
+    }
+
+    private func checkAutomaticBackup(at now: Date) {
+        guard storageError == nil, !backupBusy, !restoring,
+              now.timeIntervalSince(lastAutomaticBackupCheck) >= 3600 else { return }
+        lastAutomaticBackupCheck = now
+        beginBackup(destination: nil)
+    }
+
+    func exportBackup() {
+        guard !backupBusy, !restoring, storageError == nil else { return }
+        backupBusy = true
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "FocusTrace-backup.sqlite3"
+        panel.allowedContentTypes = [UTType(filenameExtension: "sqlite3") ?? .data]
+        let result = panel.runModal()
+        backupBusy = false
+        guard result == .OK, let url = panel.url else { return }
+        beginBackup(destination: url)
+    }
+
+    private func beginBackup(destination: URL?) {
+        guard !backupBusy, !restoring, storageError == nil, let recordingWriter else { return }
+        backupBusy = true; backupError = nil; backupMessage = nil
+        recordingWriter.backup(visits: ledger.recordsToSave(after: savedVisitCount), coverage: coverageRecordsToSave(),
+                               destination: destination, repository: backupRepository) { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                self.backupBusy = false
+                switch result {
+                case .success(let entry):
+                    if destination == nil { self.lastAutomaticBackup = entry.date }
+                    else { self.backupMessage = "Backup saved." }
+                case .failure(let error):
+                    self.backupError = error.localizedDescription
+                    if error is RecordingWriteFailure { self.recordingFailed(error) }
+                }
+            }
+        }
+    }
+
+    func chooseBackupToRestore() {
+        guard canRestoreBackup else { return }
+        backupBusy = true
+        let selected = confirmedBackupToRestore()
+        backupBusy = false
+        if let selected { restoreBackup(from: selected) }
+    }
+
+    private func confirmedBackupToRestore() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "sqlite3") ?? .data]
+        panel.message = "Choose a FocusTrace database backup."
+        if FileManager.default.fileExists(atPath: backupRepository.automaticDirectory.path) { panel.directoryURL = backupRepository.automaticDirectory }
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        let alert = NSAlert()
+        alert.messageText = "Restore this backup?"
+        alert.informativeText = "Current records, services, categories and tracking settings will be replaced. A recovery backup of your current data will be saved first."
+        alert.addButton(withTitle: "Restore"); alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return url
+    }
+
+    func restoreBackup(from url: URL) {
+        guard canRestoreBackup else { return }
+        guard let recordingWriter else { recoverClosedDatabase(from: url); return }
+        guard storageError == nil else {
+            backupError = "Restart FocusTrace before restoring after a recording error."; return
+        }
+        let wasRunning = running
+        running = false; restoring = true; backupBusy = true
+        backupError = nil; backupMessage = nil
+        generation += 1; storageEpoch &+= 1
+        saveInFlight = false; saveRequested = false
+        ledger.stop(at: Date())
+        recordingWriter.restore(visits: ledger.recordsToSave(after: savedVisitCount), coverage: coverageRecordsToSave(),
+                                from: url, repository: backupRepository) { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                self.backupBusy = false; self.restoring = false
+                guard !self.finishing else { return }
+                switch result {
+                case .success(let restored):
+                    self.applySnapshot(restored.snapshot)
+                    self.resetBrowser()
+                    self.backupMessage = "Backup restored. Your previous data is saved in the Recovery backup folder."
+                case .failure(let error):
+                    self.backupError = error.localizedDescription
+                    if error is RecordingWriteFailure || error is RecordingRestoreRecoveryError {
+                        self.recordingFailed(error); return
+                    }
+                    // The writer committed the latest tail before validating the
+                    // backup. Failed replacement rolls back to that same state.
+                    self.savedVisitCount = self.ledger.visitCount
+                    self.savedCoverageCount = self.coverage.intervals.count
+                }
+                self.lastSave = Date(); self.previousApp = nil
+                self.running = wasRunning
+                self.status = self.suspended ? "Screen inactive" : "Starting"
+                if self.running { self.tick() }
+            }
+        }
+    }
+
+    private func recoverClosedDatabase(from url: URL) {
+        restoring = true; backupBusy = true; backupError = nil; backupMessage = nil
+        generation += 1; storageEpoch &+= 1
+        let directory = dataDirectory, repository = backupRepository
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let result: Result<(RecordingWriter, RecordingSnapshot), Error>
+            do {
+                let recoveryURL = try repository.recoveryURL()
+                let database = try RecordingDatabase.recoverClosedDatabase(at: directory.appendingPathComponent("recording.sqlite3"),
+                    from: url, recoveryURL: recoveryURL)
+                let snapshot = try database.loadSnapshot()
+                result = .success((RecordingWriter(database: database), snapshot))
+            } catch { result = .failure(error) }
+            Task { @MainActor in
+                guard let self else { return }
+                self.restoring = false; self.backupBusy = false
+                guard !self.finishing else { return }
+                switch result {
+                case .success(let (writer, snapshot)):
+                    self.recordingWriter = writer; self.applySnapshot(snapshot)
+                    self.storageError = nil; self.resetBrowser()
+                    self.running = true; self.previousApp = nil
+                    self.lastSave = Date(); self.lastAutomaticBackupCheck = .distantPast
+                    self.backupMessage = "Backup restored. The previous database is preserved in the Recovery folder."
+                    self.tick()
+                case .failure(let error): self.backupError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func openBackupsFolder() {
+        do {
+            try FileManager.default.createDirectory(at: backupsURL, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            NSWorkspace.shared.open(backupsURL)
+        } catch { backupError = error.localizedDescription }
     }
 
     func exportCSV() {

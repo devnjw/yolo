@@ -26,7 +26,7 @@ public struct ActivityCategory: Codable, Equatable, Identifiable, Sendable {
 }
 
 /// Categories, service names/grouping and the Overview selection are committed
-/// atomically together. Display edits never rewrite source or visit files.
+/// atomically together. Display edits preserve source and visit identities.
 public struct CategoryCatalog: Codable, Equatable, Sendable {
     public private(set) var categories: [ActivityCategory]
     public private(set) var fallbackCategory: ActivityCategory
@@ -221,6 +221,25 @@ public struct CategoryCatalog: Codable, Equatable, Sendable {
         }
         servicePreferences = values.contains(.servicePreferences)
             ? try values.decode(ServicePreferences.self, forKey: .servicePreferences) : ServicePreferences()
+        try validateSavedState()
+    }
+
+    struct DatabaseSettings: Codable {
+        let servicePreferences: ServicePreferences
+        let selectedIDs: Set<String>?
+    }
+    var databaseSettings: DatabaseSettings {
+        DatabaseSettings(servicePreferences: servicePreferences, selectedIDs: selectedIDs)
+    }
+    init(storedCategories: [ActivityCategory], fallback: ActivityCategory,
+         assignments: [String: String], settings: DatabaseSettings) throws {
+        categories = storedCategories; fallbackCategory = fallback
+        self.assignments = assignments
+        servicePreferences = settings.servicePreferences; selectedIDs = settings.selectedIDs
+        try validateSavedState()
+    }
+
+    private mutating func validateSavedState() throws {
         try servicePreferences.validate()
         let ids = Set(categories.map(\.id))
         guard fallbackCategory.id == ActivityCategory.uncategorized.id, ids.count == categories.count, !ids.contains(ActivityCategory.uncategorized.id), !ids.contains(""),

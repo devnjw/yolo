@@ -111,6 +111,30 @@ struct PreferencesView: View {
                 Button("Open data folder") { NSWorkspace.shared.open(tracker.dataURL.deletingLastPathComponent()) }
             }
             Divider()
+            settingRow("Automatic backups", detail: "Daily · keeps the latest 7 backups. Records, services, categories and tracking settings are included.") {
+                Button("Open backups folder", action: tracker.openBackupsFolder)
+            }
+            if let date = tracker.lastAutomaticBackup {
+                Text("Last automatic backup: " + date.formatted(date: .abbreviated, time: .shortened))
+                    .font(AppType.caption).foregroundStyle(.secondary).padding(.bottom, 12)
+            }
+            Divider()
+            settingRow("Back up or restore", detail: "Restoring saves a recovery copy of your current database first.") {
+                HStack(spacing: 12) {
+                    if tracker.backupBusy { ProgressView().controlSize(.small) }
+                    Button("Back up now…", action: tracker.exportBackup)
+                        .disabled(tracker.backupBusy || tracker.storageError != nil)
+                    Button("Restore backup…", action: tracker.chooseBackupToRestore)
+                        .disabled(!tracker.canRestoreBackup)
+                }
+            }
+            if let message = tracker.backupMessage {
+                Text(message).font(AppType.caption).foregroundStyle(.secondary).padding(.bottom, 12)
+            }
+            if let error = tracker.backupError {
+                Text(error).font(AppType.caption).foregroundStyle(.red).textSelection(.enabled).padding(.bottom, 12)
+            }
+            Divider()
             VStack(alignment: .leading, spacing: 12) {
                 Text("Privacy").font(AppType.heading).foregroundStyle(.primary)
                 Text("Only source names and visit times are saved. Page contents, full URLs, and keystrokes are not recorded.")
