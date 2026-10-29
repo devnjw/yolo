@@ -16,3 +16,9 @@ xcuserdata/
 FocusTrace.csv
 visits.json
 sources.json
+coverage.json
+categories.json
+recording.sqlite3
+recording.sqlite3-journal
+recording.sqlite3-wal
+recording.sqlite3-shm

@@ -22,6 +22,7 @@ public enum ActivityPeriod: String, CaseIterable, Identifiable {
 public struct RecordingCoverage: Codable, Equatable {
     public private(set) var intervals: [DateInterval] = []
     public init() {}
+    init(intervals: [DateInterval]) { self.intervals = intervals }
 
     public mutating func observe(at date: Date) {
         if let last = intervals.last, date >= last.end, date.timeIntervalSince(last.end) <= 4 {
@@ -90,11 +91,17 @@ public struct PeriodActivity {
         let range = period.interval(containing: date, calendar: calendar)
         interval = range
         let today = calendar.startOfDay(for: now)
-        let observedVisits = ledger.visits.filter { $0.start < range.end && $0.end >= range.start }
         let observedCoverage = coverage.intervals.filter { $0.start < range.end && $0.end >= range.start }
+        var knownCache: [DateInterval: Bool] = [:]
         func known(_ day: DateInterval) -> Bool {
-            observedVisits.contains { ($0.start >= day.start && $0.start < day.end) || $0.seconds(in: day) > 0 } ||
-            observedCoverage.contains { ($0.start >= day.start && $0.start < day.end) || ($0.start < day.end && $0.end > day.start) }
+            if let result = knownCache[day] { return result }
+            let result = ledger.visits(in: day).contains {
+                ($0.start >= day.start && $0.start < day.end) || $0.seconds(in: day) > 0
+            } || observedCoverage.contains {
+                ($0.start >= day.start && $0.start < day.end) || ($0.start < day.end && $0.end > day.start)
+            }
+            knownCache[day] = result
+            return result
         }
         func knownDays(in interval: DateInterval) -> Int {
             var cursor = interval.start, count = 0

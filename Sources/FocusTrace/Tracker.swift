@@ -34,7 +34,12 @@ import TrackingCore
     private var observers: [NSObjectProtocol] = []
     private var distributedObservers: [NSObjectProtocol] = []
     private let store: TrackingStore
-    var dataURL: URL { store.visitsURL }
+    private var recordingWriter: RecordingWriter?
+    private var savedVisitCount = 0
+    private var savedCoverageCount = 0
+    private var saveInFlight = false
+    private var saveRequested = false
+    var dataURL: URL { store.directory.appendingPathComponent("recording.sqlite3") }
     func source(for id: Service) -> Source? { sources.first { $0.id == id } }
 
     private init() {
@@ -46,10 +51,14 @@ import TrackingCore
         websitesEnabled = defaults.bool(forKey: "websitesEnabled")
         idleMinutes = defaults.object(forKey: "idleMinutes") == nil ? 5 : defaults.integer(forKey: "idleMinutes")
         do {
-            ledger = Ledger(visits: try store.loadVisits())
-            coverage = try store.loadCoverage()
             sources = try store.loadSources()
             categories = try store.loadCategories(legacySources: sources)
+            let database = try RecordingDatabase(directory: store.directory)
+            ledger = Ledger(visits: try database.loadVisits())
+            coverage = try database.loadCoverage()
+            savedVisitCount = ledger.visitCount
+            savedCoverageCount = coverage.intervals.count
+            recordingWriter = RecordingWriter(database: database)
             try store.saveCategories(categories)
             try store.saveSources(sources)
         } catch {
@@ -89,7 +98,13 @@ import TrackingCore
         running = false
         generation += 1
         ledger.stop(at: Date())
-        save()
+        guard let recordingWriter else { return }
+        do {
+            // Even after a source/configuration error, drain previously submitted
+            // valid writes. Do not add records collected after an error.
+            try recordingWriter.finish(visits: storageError == nil ? ledger.recordsToSave(after: savedVisitCount) : [],
+                                       coverage: storageError == nil ? coverageRecordsToSave() : [])
+        } catch { recordingFailed(error) }
     }
 
     private func resetBrowser(_ browser: Browser? = nil) {
@@ -217,17 +232,44 @@ import TrackingCore
         if Date().timeIntervalSince(lastSave) >= 5 { save() }
     }
 
+    private func coverageRecordsToSave() -> [(ordinal: Int, interval: DateInterval)] {
+        let first = max(0, savedCoverageCount - 1)
+        return coverage.intervals.indices.dropFirst(first).map { ($0, coverage.intervals[$0]) }
+    }
+
     private func save() {
-        guard storageError == nil else { return }
-        do {
-            try store.saveVisits(ledger.visits)
-            try store.saveCoverage(coverage)
-            lastSave = Date()
-        } catch {
-            running = false
-            status = "Storage error"
-            storageError = "Could not save records. Tracking stopped. \(error.localizedDescription)"
+        guard storageError == nil, let recordingWriter else { return }
+        // Coalesce requests while disk I/O is pending. Never enqueue snapshots of
+        // the entire history, or an unbounded backlog when a disk is slow.
+        guard !saveInFlight else { saveRequested = true; return }
+        let visits = ledger.recordsToSave(after: savedVisitCount)
+        let intervals = coverageRecordsToSave()
+        savedVisitCount = ledger.visitCount
+        savedCoverageCount = coverage.intervals.count
+        lastSave = Date()
+        saveInFlight = true
+        recordingWriter.submit(visits: visits, coverage: intervals) { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                self.saveInFlight = false
+                switch result {
+                case .failure(let error): self.recordingFailed(error)
+                case .success:
+                    if self.saveRequested && self.running {
+                        self.saveRequested = false
+                        self.save()
+                    }
+                }
+            }
         }
+    }
+
+    private func recordingFailed(_ error: Error) {
+        running = false
+        generation += 1
+        ledger.stop(at: Date())
+        status = "Storage error"
+        storageError = "Could not save records. Tracking stopped. \(error.localizedDescription)"
     }
 
     func retryBrowser(_ browser: Browser) { resetBrowser(browser) }

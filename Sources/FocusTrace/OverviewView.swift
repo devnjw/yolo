@@ -20,10 +20,10 @@ struct OverviewView: View {
     @State private var hoverCategory: String?
 
     private var categoryMembers: [String: Set<Service>] {
-        catalog.members(sources: sources, recordedIDs: Set(ledger.visits.map(\.service)))
+        catalog.members(sources: sources, recordedIDs: ledger.recordedIDs)
     }
     private var includedSourceIDs: Set<Service> {
-        catalog.includedSourceIDs(sources: sources, recordedIDs: Set(ledger.visits.map(\.service)))
+        catalog.includedSourceIDs(sources: sources, recordedIDs: ledger.recordedIDs)
     }
     private var showsCategoryBreakdown: Bool { grouping == .categories }
 

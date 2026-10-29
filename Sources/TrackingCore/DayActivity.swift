@@ -19,7 +19,7 @@ public struct DayActivity {
 
     public init(ledger: Ledger, interval: DateInterval, includedServices: Set<Service>? = nil) {
         self.interval = interval
-        let visits = ledger.visits.filter {
+        let visits = ledger.visits(in: interval).filter {
             (includedServices?.contains($0.service) ?? true) &&
                 (($0.start >= interval.start && $0.start < interval.end) || $0.seconds(in: interval) > 0)
         }

@@ -19,6 +19,7 @@ struct Dashboard: View {
     @State private var date = Date()
     @State private var period: ActivityPeriod = .day
     @State private var search = ""
+    @State private var reportCache = PeriodActivityCache()
     @State private var settingsSection: SettingsSection = .general
     @State private var showingAdd = false
     @State private var showingCalendar = false
@@ -69,8 +70,8 @@ struct Dashboard: View {
                 PreferencesView(tracker: tracker, selection: $settingsSection)
             } else if section == .overview {
                 let sources = tracker.sources
-                let included = tracker.categories.includedSourceIDs(sources: sources, recordedIDs: Set(tracker.ledger.visits.map(\.service)))
-                let report = PeriodActivity(ledger: tracker.ledger, coverage: tracker.coverage,
+                let included = tracker.categories.includedSourceIDs(sources: sources, recordedIDs: tracker.ledger.recordedIDs)
+                let report = reportCache.report(ledger: tracker.ledger, coverage: tracker.coverage,
                                             period: period, date: date, includedServices: included)
                 OverviewView(report: report, ledger: tracker.ledger, sources: sources, catalog: tracker.categories,
                              onSelectCategories: tracker.selectCategories)
