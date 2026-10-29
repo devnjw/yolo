@@ -9,7 +9,7 @@ struct VisitDetail: View {
     let includedServices: Set<Service>
     let dismiss: () -> Void
     private var currentGroup: ServiceGroup {
-        ServiceGrouping.groups(from: tracker.sources).first { $0.id == group.id } ?? group
+        tracker.categories.serviceGroups(from: tracker.sources).first { $0.id == group.id } ?? group
     }
     private var activity: DayActivity {
         DayActivity(ledger: tracker.ledger, interval: day,

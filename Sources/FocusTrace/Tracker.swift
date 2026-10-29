@@ -27,6 +27,7 @@ import TrackingCore
     private var requestPending = false
     private var generation = 0
     private var previousApp: String?
+    private var previousProcessIdentifier: pid_t?
     private var suspensionReasons: Set<String> = []
     private var suspended: Bool { !suspensionReasons.isEmpty }
     private var lastSave = Date.distantPast
@@ -136,14 +137,15 @@ import TrackingCore
         }
         let frontmost = NSWorkspace.shared.frontmostApplication
         let app = frontmost?.bundleIdentifier ?? frontmost?.executableURL?.path
-        if app != previousApp {
+        if app != previousApp || frontmost?.processIdentifier != previousProcessIdentifier {
             generation += 1; previousApp = app
+            previousProcessIdentifier = frontmost?.processIdentifier
             ledger.stop(at: now); save()
             guard running else { return }
         }
-        if let browser = Browser.eligibleBrowser(frontmostID: app, enabled: enabledBrowsers,
+        if let frontmost, let browser = Browser.eligibleBrowser(frontmostID: app, enabled: enabledBrowsers,
                                                  blocked: blockedBrowsers, websitesEnabled: websitesEnabled) {
-            readBrowser(browser)
+            readBrowser(.init(browser: browser, processIdentifier: frontmost.processIdentifier))
         } else if let app {
             observe(SourceCatalog.app(identifier: app, name: frontmost?.localizedName ?? app, sources: sources), at: now)
         } else {
@@ -153,19 +155,22 @@ import TrackingCore
         saveIfNeeded()
     }
 
-    private func readBrowser(_ selected: Browser) {
+    private func readBrowser(_ target: BrowserTabReader.Target) {
         guard !requestPending else { return }
         requestPending = true
+        let selected = target.browser
         let token = generation
         let catalog = sources
         Task { [weak self, browserReader] in
-            let result = await browserReader.read(selected, sources: catalog)
+            let result = await browserReader.read(target, sources: catalog)
             guard let self else { return }
             self.requestPending = false
+            let frontmost = NSWorkspace.shared.frontmostApplication
             guard self.running, !self.suspended, !self.isIdle,
                   self.websitesEnabled, self.enabledBrowsers.contains(selected),
                   self.generation == token,
-                  NSWorkspace.shared.frontmostApplication?.bundleIdentifier == selected.bundleID else { return }
+                  target.matches(bundleIdentifier: frontmost?.bundleIdentifier,
+                                 processIdentifier: frontmost?.processIdentifier) else { return }
             if let errorCode = result.errorCode {
                 self.observe(SourceCatalog.app(identifier: selected.bundleID, name: selected.name, sources: self.sources), at: Date())
                 if errorCode == -1743 {
@@ -178,7 +183,9 @@ import TrackingCore
             } else {
                 let source = result.source ?? SourceCatalog.app(identifier: selected.bundleID, name: selected.name, sources: self.sources)
                 self.observe(source, at: Date())
-                self.browserStatuses[selected] = "Connected to \(selected.name)."
+                self.browserStatuses[selected] = result.source == nil
+                    ? "No website in the active tab. Tracking \(selected.name) as an app."
+                    : "Connected to \(selected.name)."
             }
             self.saveIfNeeded()
         }
@@ -256,6 +263,20 @@ import TrackingCore
         catch { actionError = error.localizedDescription }
     }
 
+    func renameService(_ id: String, to name: String) throws {
+        try editCategories { try $0.renameService(id, to: name, sources: sources) }
+    }
+
+    func mergeService(_ id: String, into destination: String, name: String, categoryID: String) throws {
+        try editCategories { try $0.mergeService(id, into: destination, name: name, categoryID: categoryID, sources: sources) }
+    }
+
+    func splitServiceMember(_ source: Source, from groupID: String, name: String) throws -> String {
+        var result = ""
+        try editCategories { result = try $0.splitServiceMember(source.id, from: groupID, name: name, sources: sources) }
+        return result
+    }
+
     func selectCategories(_ ids: Set<String>?) {
         do { try editCategories { try $0.select(ids) } }
         catch { actionError = error.localizedDescription }
@@ -271,7 +292,7 @@ import TrackingCore
         try editCategories { try $0.remove(id, movingTo: destination) }
     }
     private func editCategories(_ edit: (inout CategoryCatalog) throws -> Void) throws {
-        guard storageError == nil else { throw CategoryError("Resolve the storage error before changing categories.") }
+        guard storageError == nil else { throw CategoryError("Resolve the storage error before editing services or categories.") }
         var next = categories
         try edit(&next)
         try store.saveCategories(next)

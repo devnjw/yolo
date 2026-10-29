@@ -79,14 +79,12 @@ struct Dashboard: View {
                     .padding(.top, 8).padding(.bottom, AppLayout.pageInset)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    ServicesView(tracker: tracker, groups: ServiceGrouping.groups(from: tracker.sources), search: $search)
-                        .frame(maxWidth: AppLayout.contentWidth)
-                        .padding(.horizontal, AppLayout.pageInset)
-                        .padding(.top, 8).padding(.bottom, AppLayout.pageInset)
-                        .frame(maxWidth: .infinity)
-                        .background(OverlayScrollStyle())
-                }.id(section)
+                ServicesView(tracker: tracker, groups: tracker.categories.serviceGroups(from: tracker.sources), search: $search)
+                    .frame(maxWidth: AppLayout.contentWidth)
+                    .padding(.horizontal, AppLayout.pageInset)
+                    .padding(.top, 8).padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .id(DashboardSection.services)
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }

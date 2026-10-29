@@ -8,6 +8,7 @@ let package = Package(
     targets: [
         .target(name: "TrackingCore"),
         .executableTarget(name: "FocusTrace", dependencies: ["TrackingCore"]),
-        .testTarget(name: "TrackingCoreTests", dependencies: ["TrackingCore"])
+        .testTarget(name: "TrackingCoreTests", dependencies: ["TrackingCore"]),
+        .testTarget(name: "FocusTraceTests", dependencies: ["FocusTrace"])
     ]
 )

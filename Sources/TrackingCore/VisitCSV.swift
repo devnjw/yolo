@@ -3,7 +3,7 @@ import Foundation
 public enum VisitCSV {
     public static func export(_ visits: [Visit], sources: [Source], categories: CategoryCatalog? = nil) -> String {
         let names = Dictionary(sources.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        let groups = Dictionary(sources.map { ($0.id, ServiceGrouping.identity(for: $0)) }, uniquingKeysWith: { first, _ in first })
+        let groups = Dictionary(sources.map { ($0.id, categories?.serviceID(for: $0) ?? ServiceGrouping.identity(for: $0)) }, uniquingKeysWith: { first, _ in first })
         let format = ISO8601DateFormatter()
         let rows = visits.map { visit in
             let name = names[visit.service] ?? visit.service.rawValue

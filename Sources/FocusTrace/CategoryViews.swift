@@ -262,7 +262,7 @@ struct CategoriesView: View {
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             } else {
-                let groups = ServiceGrouping.groups(from: tracker.sources)
+                let groups = tracker.categories.serviceGroups(from: tracker.sources)
                 HStack {
                     Button { creating = true; name = ""; tint = .blue; customHex = nil } label: { Label("New category…", systemImage: "plus") }
                         .buttonStyle(.plain)

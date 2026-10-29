@@ -29,7 +29,7 @@ struct OverviewView: View {
 
     private var selectedService: ServiceGroup? {
         guard !showsCategoryBreakdown else { return nil }
-        return ServiceGrouping.groups(from: sources).first {
+        return catalog.serviceGroups(from: sources).first {
             $0.id == selectedServiceID && !$0.sourceIDs.isDisjoint(with: includedSourceIDs)
         }
     }
@@ -414,7 +414,7 @@ struct OverviewView: View {
 
     private var ranking: some View {
         let activity = listReport
-        let rows = ServiceGrouping.groups(from: sources).filter {
+        let rows = catalog.serviceGroups(from: sources).filter {
             let stats = activity.statistics(for: $0.sourceIDs)
             return stats.seconds > 0 || stats.visits > 0
         }.sorted {

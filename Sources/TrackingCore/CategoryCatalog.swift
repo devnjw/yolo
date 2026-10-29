@@ -25,12 +25,13 @@ public struct ActivityCategory: Codable, Equatable, Identifiable, Sendable {
     ]
 }
 
-/// Categories, service assignments and the Overview selection are committed
-/// together. No source or visit file needs rewriting for a category edit.
+/// Categories, service names/grouping and the Overview selection are committed
+/// atomically together. Display edits never rewrite source or visit files.
 public struct CategoryCatalog: Codable, Equatable, Sendable {
     public private(set) var categories: [ActivityCategory]
     public private(set) var fallbackCategory: ActivityCategory
     public private(set) var assignments: [String: String]
+    private var servicePreferences = ServicePreferences()
     /// nil means all categories, including categories created in the future.
     public private(set) var selectedIDs: Set<String>?
     public var options: [ActivityCategory] { categories + [fallbackCategory] }
@@ -64,7 +65,7 @@ public struct CategoryCatalog: Codable, Equatable, Sendable {
                 selectedIDs = selected.isEmpty ? nil : selected
             }
         }
-        for group in ServiceGrouping.groups(from: sources) where assignments[group.id] == nil {
+        for group in serviceGroups(from: sources) where assignments[group.id] == nil {
             let suggestions = Set(group.sources.compactMap { ServiceCategoryDefaults.categoryID(for: $0) })
             guard suggestions.count == 1, let id = suggestions.first,
                   categories.contains(where: { $0.id == id }) else { continue }
@@ -83,11 +84,45 @@ public struct CategoryCatalog: Codable, Equatable, Sendable {
     }
     public func category(for groupID: String) -> ActivityCategory { category(id: categoryID(for: groupID)) }
 
+    public func serviceGroups(from sources: [Source]) -> [ServiceGroup] { servicePreferences.groups(from: sources) }
+    public func serviceID(for source: Source) -> String { servicePreferences.identity(for: source) }
+
+    public mutating func renameService(_ id: String, to input: String, sources: [Source]) throws {
+        guard serviceGroups(from: sources).contains(where: { $0.id == id }) else { throw ServiceEditError("This service is no longer available.") }
+        servicePreferences.rename(id, name: try ServicePreferences.validatedName(input))
+    }
+
+    /// The destination retains its stable identity; both current and future
+    /// members of the source group resolve to it. All validation precedes edits.
+    public mutating func mergeService(_ id: String, into destination: String, name: String,
+                                      categoryID: String, sources: [Source]) throws {
+        let groups = serviceGroups(from: sources)
+        guard id != destination, groups.contains(where: { $0.id == id }),
+              let target = groups.first(where: { $0.id == destination }) else { throw ServiceEditError("Choose a different existing service to merge with.") }
+        let name = try ServicePreferences.validatedName(name)
+        guard options.contains(where: { $0.id == categoryID }) else { throw ServiceEditError("Choose a category for the merged service.") }
+        servicePreferences.merge(id, into: destination, name: name, representative: target.representative.id)
+        assignments[id] = nil
+        assignments[destination] = categoryID
+    }
+
+    @discardableResult public mutating func splitServiceMember(_ sourceID: Service, from groupID: String,
+                                                               name: String, sources: [Source]) throws -> String {
+        guard let group = serviceGroups(from: sources).first(where: { $0.id == groupID }), group.sources.count > 1,
+              let source = group.sources.first(where: { $0.id == sourceID }) else {
+            throw ServiceEditError("Choose an app or website from a service with multiple members.")
+        }
+        let name = try ServicePreferences.validatedName(name)
+        let id = servicePreferences.split(source, name: name)
+        assignments[id] = categoryID(for: groupID)
+        return id
+    }
+
     /// Includes orphaned historical IDs in Uncategorized so All never loses time.
     public func members(sources: [Source], recordedIDs: Set<Service> = []) -> [String: Set<Service>] {
         var result = Dictionary(uniqueKeysWithValues: options.map { ($0.id, Set<Service>()) })
         for source in sources {
-            result[categoryID(for: ServiceGrouping.identity(for: source)), default: []].insert(source.id)
+            result[categoryID(for: serviceID(for: source)), default: []].insert(source.id)
         }
         result[ActivityCategory.uncategorized.id, default: []].formUnion(recordedIDs.subtracting(sources.map(\.id)))
         return result
@@ -159,7 +194,7 @@ public struct CategoryCatalog: Codable, Equatable, Sendable {
         return name
     }
 
-    private enum CodingKeys: String, CodingKey { case categories, assignments, selectedIDs, fallbackCategory }
+    private enum CodingKeys: String, CodingKey { case categories, assignments, selectedIDs, fallbackCategory, servicePreferences }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         categories = try values.decode([ActivityCategory].self, forKey: .categories)
@@ -178,6 +213,15 @@ public struct CategoryCatalog: Codable, Equatable, Sendable {
         }
         assignments = try values.decode([String: String].self, forKey: .assignments)
         selectedIDs = try values.decodeIfPresent(Set<String>.self, forKey: .selectedIDs)
+        // One-time migration: Codex used to share ChatGPT's automatic group.
+        // Preserve that category, including Other, without recreating obsolete
+        // assignments after later manual merges.
+        if !values.contains(.servicePreferences), assignments["known:codex"] == nil {
+            assignments["known:codex"] = assignments["known:chatgpt"]
+        }
+        servicePreferences = values.contains(.servicePreferences)
+            ? try values.decode(ServicePreferences.self, forKey: .servicePreferences) : ServicePreferences()
+        try servicePreferences.validate()
         let ids = Set(categories.map(\.id))
         guard fallbackCategory.id == ActivityCategory.uncategorized.id, ids.count == categories.count, !ids.contains(ActivityCategory.uncategorized.id), !ids.contains(""),
               Set(assignments.values).isSubset(of: ids.union([ActivityCategory.uncategorized.id])) else { throw CategoryError("Saved category data is invalid.") }

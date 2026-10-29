@@ -34,7 +34,8 @@ public enum ServiceGrouping {
     // Explicit identities only: never infer ownership from a display name,
     // a common domain suffix, or a user-supplied alias.
     private static let definitions: [Definition] = [
-        .init(key: "chatgpt", name: "ChatGPT", apps: ["com.openai.chat", "com.openai.codex"], domains: ["chatgpt.com", "chat.openai.com"]),
+        .init(key: "chatgpt", name: "ChatGPT", apps: ["com.openai.chat"], domains: ["chatgpt.com", "chat.openai.com"]),
+        .init(key: "codex", name: "Codex", apps: ["com.openai.codex"], domains: []),
         .init(key: "figma", name: "Figma", apps: ["com.figma.desktop"], domains: ["figma.com"]),
         .init(key: "github", name: "GitHub", apps: [], domains: ["github.com"]),
         .init(key: "instagram", name: "Instagram", apps: [], domains: ["instagram.com"]),
@@ -51,14 +52,26 @@ public enum ServiceGrouping {
     }
 
     public static func groups(from sources: [Source]) -> [ServiceGroup] {
+        grouped(sources, identity: identity, name: defaultName)
+    }
+
+    public static func sourceName(for source: Source) -> String {
+        source.kind == .website ? source.identifier : (definitions.first { $0.matches(source) }?.name ?? source.name)
+    }
+
+    static func defaultName(for id: String, representative: Source) -> String {
+        definitions.first { "known:" + $0.key == id }?.name ?? representative.name
+    }
+
+    static func grouped(_ sources: [Source], identity: (Source) -> String,
+                        name: (String, Source) -> String) -> [ServiceGroup] {
         Dictionary(grouping: sources, by: identity).map { id, members in
             let ordered = members.sorted {
                 if $0.kind != $1.kind { return $0.kind == .app }
                 if $0.identifier != $1.identifier { return $0.identifier < $1.identifier }
                 return $0.id.rawValue < $1.id.rawValue
             }
-            let name = definitions.first { "known:" + $0.key == id }?.name ?? ordered[0].name
-            return ServiceGroup(id: id, name: name, sources: ordered)
+            return ServiceGroup(id: id, name: name(id, ordered[0]), sources: ordered)
         }.sorted {
             let comparison = $0.name.localizedStandardCompare($1.name)
             return comparison == .orderedSame ? $0.id < $1.id : comparison == .orderedAscending

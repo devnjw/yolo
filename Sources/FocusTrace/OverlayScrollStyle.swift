@@ -4,13 +4,21 @@ import SwiftUI
 /// Attach inside a ScrollView's content so only its enclosing scroll view uses
 /// native overlay indicators. Keep AppKit's scrolling, dragging and accessibility.
 struct OverlayScrollStyle: NSViewRepresentable {
-    func makeNSView(context: Context) -> ScrollStyleView { ScrollStyleView() }
+    var controlSize: NSControl.ControlSize = .regular
+
+    func makeNSView(context: Context) -> ScrollStyleView {
+        let view = ScrollStyleView()
+        view.controlSize = controlSize
+        return view
+    }
 
     func updateNSView(_ nsView: ScrollStyleView, context: Context) {
+        nsView.controlSize = controlSize
         nsView.applyStyle()
     }
 
     final class ScrollStyleView: NSView {
+        var controlSize: NSControl.ControlSize = .regular
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func viewDidMoveToWindow() {
@@ -34,6 +42,12 @@ struct OverlayScrollStyle: NSViewRepresentable {
             guard let scrollView = enclosingScrollView else { return }
             if scrollView.scrollerStyle != .overlay { scrollView.scrollerStyle = .overlay }
             if !scrollView.autohidesScrollers { scrollView.autohidesScrollers = true }
+            if scrollView.verticalScroller?.controlSize != controlSize {
+                scrollView.verticalScroller?.controlSize = controlSize
+            }
+            if scrollView.horizontalScroller?.controlSize != controlSize {
+                scrollView.horizontalScroller?.controlSize = controlSize
+            }
         }
     }
 }
