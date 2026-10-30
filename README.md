@@ -2,7 +2,36 @@
 
 Mac에서 사용 중인 모든 전면 앱과 지원 브라우저의 웹사이트 사용 시간·방문 횟수를 기록하는 SwiftUI 앱입니다. 서비스를 사용자 정의 카테고리로 분류하고 전체 또는 선택한 카테고리의 사용 패턴을 볼 수 있습니다. 기록은 Mac에 저장되며 계정이나 서버가 필요하지 않습니다.
 
-## 빌드와 실행
+## 받아서 설치하기
+
+**[최신 버전 다운로드](https://github.com/devnjw/yolo/releases/latest)** · [v0.2.0 설치 파일 바로 받기](https://github.com/devnjw/yolo/releases/download/v0.2.0/FocusTrace-0.2.0-18-universal.dmg)
+
+친구에게는 **https://github.com/devnjw/yolo/releases/latest** 링크를 보내세요. GitHub 로그인 없이 Release의 **Assets**에서 `.dmg`를 받을 수 있습니다.
+
+**macOS 13 이상 · Apple Silicon / Intel Mac 지원.** 받는 사람은 개발 도구나 계정이 필요하지 않습니다.
+
+1. [최신 Release](https://github.com/devnjw/yolo/releases/latest)의 **Assets**에서 `FocusTrace-버전-빌드번호-universal.dmg`를 받습니다.
+2. DMG를 열고 **FocusTrace.app → Applications**로 드래그합니다.
+3. DMG를 추출하고 **응용 프로그램**에서 FocusTrace를 실행합니다.
+4. 사이트별 기록이 필요하면 **Settings → General → Website tracking**을 켜고 Chrome·Safari를 선택한 뒤 macOS의 자동화 접근을 허용합니다.
+
+현재 기본 공유 빌드는 ad-hoc 서명이며 **Apple 공증을 받지 않았습니다.** 첫 실행이 차단되면 출처를 확인한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기(Open Anyway)**를 사용합니다. [Apple의 실행 허용 안내](https://support.apple.com/ko-kr/102445)를 참고하세요. Developer ID 인증서와 공증 설정을 제공한 빌드는 아래 스크립트로 별도로 만들 수 있습니다.
+
+업데이트는 앱을 종료한 후 새 앱으로 교체하며 기록은 유지됩니다. 자동 업데이트는 없습니다. 설치·권한·업데이트·삭제에 관한 짧은 안내는 [INSTALL.txt](docs/INSTALL.txt)에 있으며 DMG에도 함께 들어갑니다.
+
+## 친구에게 공유할 파일 만들기
+
+```sh
+zsh scripts/package.sh
+```
+
+`dist/FocusTrace-0.2.0-18-universal.dmg`와 `.dmg.sha256`이 생성됩니다(이름은 `Info.plist`의 버전·빌드번호를 따릅니다). **DMG 하나를 전달하면 됩니다.** Apple Silicon·Intel 코드를 함께 담고, Applications 바로가기와 설치 안내를 포함합니다. 개인 기록·환경설정·소스 코드는 넣지 않습니다. 공용 앱은 `dist/universal/FocusTrace.app`에 따로 만들어 기존 개발용 앱과 구분합니다. 빌드에 실패하면 이전 앱을 유지합니다.
+
+GitHub Actions의 **Build and test**가 성공하면 실행 화면의 **Artifacts → FocusTrace-macOS-universal**에서도 DMG와 체크섬을 받을 수 있습니다. Artifacts는 GitHub 로그인과 저장소 접근 권한이 필요하고 14일간 보관되므로, 친구에게는 공개 [최신 Release](https://github.com/devnjw/yolo/releases/latest) 링크를 공유하세요. CI는 설치 파일을 만들고 보관하며, 공개 Release 게시는 별도로 진행합니다.
+
+공증을 위한 준비·명령과 배포 점검은 [배포 안내](docs/DISTRIBUTION.md)를 참고하세요.
+
+## 소스에서 빌드와 실행
 
 - 실행: macOS 13 이상
 - 빌드: macOS, Swift 6.0 이상과 macOS SDK (Xcode 16 이상 또는 해당 Command Line Tools)
@@ -16,7 +45,7 @@ zsh build.sh
 open dist/FocusTrace.app
 ```
 
-빌드 스크립트는 아이콘을 생성하고 현재 Mac 아키텍처용 실행 파일을 `.app`으로 묶어 ad-hoc 서명합니다. **실행 중인 FocusTrace를 종료한 후 빌드하세요.** Developer ID 서명·공증을 거친 배포용 빌드는 아닙니다. Swift 패키지는 Swift 5 언어 모드를 사용합니다.
+`build.sh`는 현재 Mac 아키텍처용 앱을 만들고, `build.sh --universal`은 Apple Silicon·Intel 공용 앱을 만듭니다. 아이콘 생성과 서명 검증을 포함하며, **교체할 경로의 FocusTrace가 실행 중이면 먼저 종료해야 합니다.** 기본 서명은 ad-hoc이며 `SIGNING_IDENTITY`로 Developer ID 서명을 지정할 수 있습니다. Swift 패키지는 Swift 5 언어 모드를 사용합니다.
 
 ## 사용법
 
@@ -131,7 +160,7 @@ swift test
 zsh build.sh
 ```
 
-GitHub Actions에서도 테스트와 release 패키징·서명 검증을 실행합니다. 테스트는 실제 macOS 자동화 권한, 잠금·잠자기 이벤트, 로그인 자동 실행을 대신하지 않습니다. 이 동작은 빌드한 앱에서 확인해야 합니다.
+GitHub Actions에서도 테스트와 universal DMG 패키징·서명 검증을 실행하고 설치 파일을 artifact로 보관합니다. 테스트는 실제 macOS 자동화 권한, 잠금·잠자기 이벤트, 로그인 자동 실행을 대신하지 않습니다. 이 동작은 빌드한 앱에서 확인해야 합니다.
 
 대용량 성능 비교는 개인 기록 대신 방문 20만 건의 합성 데이터로 실행합니다. 시간은 CI 통과 기준으로 고정하지 않으며 결과의 합계와 저장 후 기록 일치를 검증합니다.
 

@@ -25,5 +25,14 @@ jobs:
         run: swift --version
       - name: Run tests
         run: swift test
-      - name: Build and verify signed app
-        run: zsh build.sh
+      - name: Build and verify universal disk image
+        run: zsh scripts/package.sh
+      - name: Save shareable installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: FocusTrace-macOS-universal
+          path: |
+            dist/FocusTrace-*-universal.dmg
+            dist/FocusTrace-*-universal.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
