@@ -4,7 +4,7 @@ Mac에서 사용 중인 모든 전면 앱과 지원 브라우저의 웹사이트
 
 ## 받아서 설치하기
 
-**[최신 버전 다운로드](https://github.com/devnjw/yolo/releases/latest)** · [v0.2.2 설치 파일 바로 받기](https://github.com/devnjw/yolo/releases/download/v0.2.2/FocusTrace-0.2.2-20-universal.dmg)
+**[최신 버전 다운로드](https://github.com/devnjw/yolo/releases/latest)** · [v0.3.0 설치 파일 바로 받기](https://github.com/devnjw/yolo/releases/download/v0.3.0/FocusTrace-0.3.0-21-universal.dmg)
 
 친구에게는 **https://github.com/devnjw/yolo/releases/latest** 링크를 보내세요. GitHub 로그인 없이 Release의 **Assets**에서 `.dmg`를 받을 수 있습니다.
 
@@ -25,7 +25,7 @@ Mac에서 사용 중인 모든 전면 앱과 지원 브라우저의 웹사이트
 zsh scripts/package.sh
 ```
 
-`dist/FocusTrace-0.2.2-20-universal.dmg`와 `.dmg.sha256`이 생성됩니다(이름은 `Info.plist`의 버전·빌드번호를 따릅니다). **DMG 하나를 전달하면 됩니다.** Apple Silicon·Intel 코드를 함께 담고, Applications 바로가기와 설치 안내를 포함합니다. 개인 기록·환경설정·소스 코드는 넣지 않습니다. 공용 앱은 `dist/universal/FocusTrace.app`에 따로 만들어 기존 개발용 앱과 구분합니다. 빌드에 실패하면 이전 앱을 유지합니다.
+`dist/FocusTrace-0.3.0-21-universal.dmg`와 `.dmg.sha256`이 생성됩니다(이름은 `Info.plist`의 버전·빌드번호를 따릅니다). **DMG 하나를 전달하면 됩니다.** Apple Silicon·Intel 코드를 함께 담고, Applications 바로가기와 설치 안내를 포함합니다. 개인 기록·환경설정·소스 코드는 넣지 않습니다. 공용 앱은 `dist/universal/FocusTrace.app`에 따로 만들어 기존 개발용 앱과 구분합니다. 빌드에 실패하면 이전 앱을 유지합니다.
 
 GitHub Actions의 **Build and test**가 성공하면 실행 화면의 **Artifacts → FocusTrace-macOS-universal**에서도 DMG와 체크섬을 받을 수 있습니다. Artifacts는 GitHub 로그인과 저장소 접근 권한이 필요하고 14일간 보관되므로, 친구에게는 공개 [최신 Release](https://github.com/devnjw/yolo/releases/latest) 링크를 공유하세요. CI는 설치 파일을 만들고 보관하며, 공개 Release 게시는 별도로 진행합니다.
 
@@ -116,6 +116,37 @@ Overview의 누적 막대·목록·카테고리 선택은 Apple Screen Time을 �
 전체 URL은 메모리에서 대상 분류에만 사용하며 사이트 호스트만 저장합니다. bundle ID가 없는 앱은 실행 파일 경로를 식별자로 사용합니다. 페이지 제목·내용·메시지·스크린샷·키 입력 내용은 저장하지 않으며, 분석 SDK나 사용 기록 업로드 기능이 없습니다. 추적 설정과 카테고리 선택은 DB에, 화면 설정은 UserDefaults에 저장됩니다.
 
 앱 아이콘은 로컬에서 읽습니다. 웹사이트 아이콘은 해당 사이트의 공개 홈페이지·아이콘 주소에 HTTPS 요청으로 가져옵니다. 브라우저 쿠키·인증 정보는 사용하지 않으며, 제3자 아이콘 검색 서비스는 사용하지 않습니다. 아이콘 서버에는 일반적인 네트워크 요청 정보가 전달됩니다. 아이콘은 `~/Library/Caches/FocusTrace/WebsiteIcons/v2/`에 캐시하고, 실패하면 기존 캐시 또는 기본 아이콘을 표시합니다.
+
+## Codex와 Claude Code에서 조회
+
+FocusTrace 0.3.0부터 앱에 읽기 전용 MCP 서버가 들어 있습니다. 응용 프로그램 폴더에 설치한 FocusTrace를 한 번 실행해 기록 DB를 만든 뒤, 사용하는 클라이언트의 등록 명령을 실행하고 새 세션을 엽니다.
+
+```sh
+codex mcp add focustrace -- /Applications/FocusTrace.app/Contents/MacOS/focustrace-mcp
+claude mcp add --transport stdio --scope user focustrace -- /Applications/FocusTrace.app/Contents/MacOS/focustrace-mcp
+```
+
+앱을 다른 곳에 설치했다면 해당 경로를 지정하세요. 이전에 같은 이름으로 등록한 서버가 있다면 현재 설정을 재사용하거나 기존 등록을 제거한 뒤 설치된 앱의 경로로 등록할 수 있습니다. 소스에서 MCP만 빌드할 때는 다음 명령을 실행하고 등록 명령에 빌드 결과의 절대 경로를 전달합니다.
+
+```sh
+swift build -c release --product focustrace-mcp
+printf '%s/focustrace-mcp\n' "$(swift build -c release --show-bin-path)"
+```
+
+예를 들어 “FocusTrace Overview 기준으로 지난주 업무 도구 사용량을 일별로 비교해줘”라고 요청할 수 있습니다.
+
+| MCP 도구 | 조회 내용 |
+| --- | --- |
+| `usage_summary` | 임의 기간의 합계와 카테고리·서비스·날짜별 집계. 오늘의 일부 기록이 일평균에 포함될 수 있습니다. |
+| `usage_overview` | Overview의 일·주·월·연 집계와 시간·일·월 단위 차트 데이터. 카테고리, 서비스, 차트 구간을 선택할 수 있습니다. 주·월·연 상단 지표는 기록된 완료일의 평균입니다. |
+| `list_services` | 미사용 항목을 포함한 전체 서비스와 누적 사용량. 유형·카테고리·검색어로 필터링하며, 구성원별 앱 식별자·도메인·별칭·사용량을 요청할 수 있습니다. |
+| `list_visits` | 개별 방문의 시작·종료·길이, 범위 내 사용 시간, 최장 방문, 사용 시간 비중, 30초 이하 방문. 카테고리·서비스·구성원으로 필터링할 수 있습니다. |
+| `list_recording_coverage` | 유휴 시간도 포함한 관측 구간. 관측 구간 사이에서 수집 공백을 확인할 수 있습니다. |
+| `recording_info` | 카테고리와 색상, 저장된 Overview 선택, 웹 추적 설정, 브라우저 선택, 최초·최근 관측 시각, 기록 수, 자동 백업 날짜. |
+
+날짜 범위 조회는 시작일을 포함하고 종료일을 제외하며 한 번에 최대 366일을 지원합니다. 기본 시간대는 Mac 설정을 따르고 IANA 시간대를 지정할 수 있습니다. 사용 시간은 초 단위입니다. 기록 근거가 없는 구간에는 사용량을 생략합니다. 상세 목록은 다음 페이지 위치를 반환합니다. 방문 목록의 페이지를 이어갈 때는 동일한 필터와 기간을 사용합니다.
+
+MCP는 저장된 데이터를 읽기 전용으로 조회합니다. 현재 활성 앱·방문과 같이 아직 메모리에만 있는 정보, macOS 권한 및 로그인 항목 상태는 앱에서 확인할 수 있습니다. 에이전트의 모델에는 호출 결과가 전달될 수 있으며, 방문 상세·서비스 구성원 결과에는 방문 시각이나 앱·사이트 식별자가 포함됩니다.
 
 ## 코드 구조
 

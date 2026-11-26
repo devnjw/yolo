@@ -13,14 +13,14 @@ swift test
 zsh scripts/package.sh
 ```
 
-`dist/FocusTrace-<version>-<build>-universal.dmg` 하나를 전달합니다. DMG는 읽기 전용 압축 이미지이며 앱, Applications 바로가기, 설치 안내, 공증 여부만 포함합니다. 소스·기록·백업·로컬 설정을 패키징하지 않습니다. 개발용 `dist/FocusTrace.app` 대신 `dist/universal/FocusTrace.app`을 빌드합니다. 버전과 빌드번호는 `Resources/Info.plist`에서 관리하며 새 버전을 공유하기 전에 올리세요.
+`dist/FocusTrace-<version>-<build>-universal.dmg` 하나를 전달합니다. DMG는 읽기 전용 압축 이미지이며 앱, Applications 바로가기, 설치 안내, 공증 여부만 포함합니다. 앱에는 `Contents/MacOS/focustrace-mcp`가 들어 있습니다. 소스·기록·백업·로컬 설정을 패키징하지 않습니다. 개발용 `dist/FocusTrace.app` 대신 `dist/universal/FocusTrace.app`을 빌드합니다. 버전과 빌드번호는 `Resources/Info.plist`에서 관리하며 새 버전을 공유하기 전에 올리세요.
 
 기본 빌드는 ad-hoc 서명입니다. 코드 서명 검증 성공은 Apple의 Developer ID 인증이나 공증을 의미하지 않습니다. 다운로드한 파일에는 Gatekeeper 경고가 발생할 수 있습니다. 받는 사람이 할 일은 [설치 안내](INSTALL.txt)에 설명되어 있습니다.
 
 체크섬은 최종 DMG를 기준으로 생성합니다. 같은 폴더에서 다음으로 확인할 수 있습니다.
 
 ```sh
-shasum -a 256 -c FocusTrace-0.2.2-20-universal.dmg.sha256
+shasum -a 256 -c FocusTrace-0.3.0-21-universal.dmg.sha256
 ```
 
 체크섬은 파일 전송 중 변경 여부를 확인하는 용도이며 보낸 사람의 신원을 인증하지 않습니다.
@@ -43,7 +43,7 @@ GitHub Actions는 인증서나 공증 자격 증명을 사용하지 않으며 ad
 
 ## 전달 전 확인
 
-- 테스트 통과, universal 실행 파일의 arm64·x86_64 슬라이스와 서명 검증 성공.
+- 테스트 통과, 앱과 MCP 실행 파일 각각의 arm64·x86_64 슬라이스와 서명 검증 성공.
 - DMG를 열어 앱과 Applications 바로가기, 설치 안내가 있는지 확인.
 - 별도 Mac/새 사용자 계정에서 응용 프로그램으로 복사한 뒤 첫 실행·자동화 허용·사이트 기록·로그인 자동 실행 확인.
 - 업데이트는 앱을 종료한 뒤 교체하고 기록이 유지되는지 확인. bundle ID는 기존 `local.jinwoo.FocusTrace`를 유지합니다.

@@ -31,6 +31,15 @@ public struct RecordingCoverage: Codable, Equatable {
             intervals.append(DateInterval(start: date, duration: 0))
         }
     }
+
+    public func hasRecording(in interval: DateInterval, ledger: Ledger) -> Bool {
+        ledger.visits(in: interval).contains {
+            ($0.start >= interval.start && $0.start < interval.end) || $0.seconds(in: interval) > 0
+        } || intervals.contains {
+            ($0.start >= interval.start && $0.start < interval.end) ||
+                ($0.start < interval.end && $0.end > interval.start)
+        }
+    }
 }
 
 /// A single period, with a shared denominator for time, visits and source rows.
@@ -91,15 +100,13 @@ public struct PeriodActivity {
         let range = period.interval(containing: date, calendar: calendar)
         interval = range
         let today = calendar.startOfDay(for: now)
-        let observedCoverage = coverage.intervals.filter { $0.start < range.end && $0.end >= range.start }
+        let observedCoverage = RecordingCoverage(intervals: coverage.intervals.filter {
+            $0.start < range.end && $0.end >= range.start
+        })
         var knownCache: [DateInterval: Bool] = [:]
         func known(_ day: DateInterval) -> Bool {
             if let result = knownCache[day] { return result }
-            let result = ledger.visits(in: day).contains {
-                ($0.start >= day.start && $0.start < day.end) || $0.seconds(in: day) > 0
-            } || observedCoverage.contains {
-                ($0.start >= day.start && $0.start < day.end) || ($0.start < day.end && $0.end > day.start)
-            }
+            let result = observedCoverage.hasRecording(in: day, ledger: ledger)
             knownCache[day] = result
             return result
         }

@@ -34,6 +34,17 @@ Apple 안내: https://support.apple.com/ko-kr/102445
 - Settings → General → Launch at login으로 로그인 시 자동 실행할 수 있습니다.
 - 창을 닫아도 기록은 계속됩니다. 종료: 메뉴 막대 아이콘 → Quit FocusTrace.
 
+Codex·Claude Code에서 조회
+-------------------------
+FocusTrace를 한 번 실행한 뒤, 사용하는 클라이언트에 서버를 등록하고 새 세션을
+엽니다. 아래 경로는 응용 프로그램 폴더에 앱을 설치한 경우입니다.
+
+  codex mcp add focustrace -- /Applications/FocusTrace.app/Contents/MacOS/focustrace-mcp
+  claude mcp add --transport stdio --scope user focustrace -- /Applications/FocusTrace.app/Contents/MacOS/focustrace-mcp
+
+MCP는 저장된 기록을 읽기 전용으로 조회합니다. 도구 응답은 사용 중인 모델에
+전달될 수 있으며, 상세 조회에는 방문 시각과 앱·사이트 식별자가 포함될 수 있습니다.
+
 기록과 개인정보
 --------------
 기록은 이 Mac에만 저장됩니다. 계정과 사용 기록 업로드 기능은 없습니다.

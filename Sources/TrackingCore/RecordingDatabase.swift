@@ -344,6 +344,15 @@ extension RecordingDatabase {
         }
     }
 
+    /// Read committed data without taking the app's recording lease or running migrations.
+    public static func readSnapshot(at url: URL) throws -> RecordingSnapshot {
+        let source = try RecordingDatabase(readOnlyURL: url)
+        try source.execute("BEGIN DEFERRED")
+        defer { try? source.execute("ROLLBACK") }
+        try source.validateFormat()
+        return try source.loadSnapshot()
+    }
+
     public func saveCatalog(sources: [Source], categories: CategoryCatalog) throws {
         try transaction { try replaceCatalog(sources: sources, categories: categories) }
     }

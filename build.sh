@@ -35,18 +35,22 @@ trap 'rm -rf "$staging"' EXIT
 bundle="$staging/FocusTrace.app"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$bin_dir/FocusTrace" "$bundle/Contents/MacOS/FocusTrace"
+mcp="$bundle/Contents/MacOS/focustrace-mcp"
+cp "$bin_dir/focustrace-mcp" "$mcp"
 cp Resources/Info.plist "$bundle/Contents/Info.plist"
 cp Resources/AppIcon.icns "$bundle/Contents/Resources/AppIcon.icns"
 if $universal; then
     for architecture in arm64 x86_64; do
         xcrun lipo "$bundle/Contents/MacOS/FocusTrace" -verify_arch "$architecture"
+        xcrun lipo "$mcp" -verify_arch "$architecture"
     done
 fi
 identity="${SIGNING_IDENTITY:--}"
-sign_args=(--force --sign "$identity" --options runtime --entitlements Resources/Entitlements.plist)
+sign_args=(--force --sign "$identity" --options runtime)
 if [[ "$identity" != - ]]; then sign_args+=(--timestamp); fi
-codesign "${sign_args[@]}" "$bundle"
-codesign --verify --strict "$bundle"
+codesign "${sign_args[@]}" "$mcp"
+codesign "${sign_args[@]}" --entitlements Resources/Entitlements.plist "$bundle"
+codesign --verify --deep --strict "$bundle"
 # Only replace the previous output after a successful build and signature check.
 rm -rf "$app"
 mv "$bundle" "$app"
