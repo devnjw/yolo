@@ -159,15 +159,7 @@ struct OverviewView: View {
                     if let seconds = bin.seconds {
                         if seconds > 0 {
                             ForEach(segments[bin.id] ?? []) { segment in
-                                BarMark(x: .value("Period", bin.id),
-                                        yStart: .value("Start minutes", segment.startSeconds / 60),
-                                        yEnd: .value("End minutes", segment.endSeconds / 60))
-                                    .cornerRadius(0)
-                                    .clipShape(StackedBarShape(seconds: segment.seconds, end: segment.endSeconds,
-                                                              total: segments[bin.id]?.last?.endSeconds ?? segment.endSeconds))
-                                    .foregroundStyle(segment.category.color.opacity(selection == nil || selection == bin.id ? 1 : 0.3))
-                                    .accessibilityLabel(binLabel(bin) + ", " + segment.category.name)
-                                    .accessibilityValue(overviewTimeLabel(segment.seconds))
+                                timelineBar(bin: bin, segment: segment, total: segments[bin.id]?.last?.endSeconds)
                             }
                         } else {
                             PointMark(x: .value("Period", bin.id), y: .value("Minutes", 0))
@@ -252,6 +244,24 @@ struct OverviewView: View {
                     .font(AppType.caption).foregroundStyle(.secondary).padding(.top, 8)
             }
         }
+    }
+
+    private func timelineBar(bin: PeriodActivity.Bin, segment: PeriodActivity.Bin.CategorySegment,
+                             total: Double?) -> some ChartContent {
+        let startMinutes = segment.startSeconds / 60
+        let endMinutes = segment.endSeconds / 60
+        let shape = StackedBarShape(seconds: segment.seconds, end: segment.endSeconds, total: total ?? segment.endSeconds)
+        let color = segment.category.color.opacity(selection == nil || selection == bin.id ? 1 : 0.3)
+        let label = binLabel(bin) + ", " + segment.category.name
+        let value = overviewTimeLabel(segment.seconds)
+        let bar = BarMark(x: .value("Period", bin.id),
+                          yStart: .value("Start minutes", startMinutes),
+                          yEnd: .value("End minutes", endMinutes))
+        return bar.cornerRadius(0)
+            .clipShape(shape)
+            .foregroundStyle(color)
+            .accessibilityLabel(label)
+            .accessibilityValue(value)
     }
 
     private func chartAccessibility(bins: [PeriodActivity.Bin],
