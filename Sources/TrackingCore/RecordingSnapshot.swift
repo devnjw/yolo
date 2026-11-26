@@ -4,8 +4,9 @@ import Foundation
 public struct TrackingOptions: Codable, Equatable {
     public var websitesEnabled: Bool
     public var enabledBrowsers: Set<Browser>
+    // Retained in the database and backup format for older versions of FocusTrace.
     public var idleMinutes: Int
-    public init(websitesEnabled: Bool = false, enabledBrowsers: Set<Browser> = [.chrome], idleMinutes: Int = 5) {
+    public init(websitesEnabled: Bool = false, enabledBrowsers: Set<Browser> = [.chrome], idleMinutes: Int = 0) {
         self.websitesEnabled = websitesEnabled; self.enabledBrowsers = enabledBrowsers; self.idleMinutes = idleMinutes
     }
     func validate() throws {

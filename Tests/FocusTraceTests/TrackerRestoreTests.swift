@@ -37,7 +37,6 @@ import TrackingCore
         XCTAssertEqual(tracker.categories, expected.categories)
         XCTAssertTrue(tracker.websitesEnabled)
         XCTAssertEqual(tracker.enabledBrowsers, [.safari])
-        XCTAssertEqual(tracker.idleMinutes, 10)
         tracker.finish()
         XCTAssertEqual(try RecordingDatabase(directory: root.appendingPathComponent("Data")).loadSnapshot(), expected)
     }

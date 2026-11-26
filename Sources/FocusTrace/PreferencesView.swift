@@ -89,15 +89,6 @@ struct PreferencesView: View {
                         .font(AppType.caption).foregroundStyle(.secondary).padding(.bottom, 16)
                 }
             }
-            Divider()
-            settingRow("Exclude idle time after", detail: "Watching without keyboard or mouse input can count as idle.") {
-                Picker("Exclude idle time after", selection: $tracker.idleMinutes) {
-                    Text("1 minute").tag(1)
-                    Text("5 minutes").tag(5)
-                    Text("10 minutes").tag(10)
-                    Text("Never").tag(0)
-                }.labelsHidden().frame(width: 120)
-            }
         }
     }
 

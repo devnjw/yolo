@@ -109,7 +109,7 @@ struct OverviewView: View {
     }
 
     private var averageHelp: String {
-        report.period == .day ? "Idle and inactive screen time are excluded." :
+        report.period == .day ? "Tracking pauses when the display sleeps or the screen locks." :
         "Daily average across \(report.recordedDays) completed days with recording evidence, including days with zero activity in the selected categories. Missing days and today are excluded. Historical data covers only the services recorded at the time."
     }
 

@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import CoreGraphics
 import TrackingCore
 import UniformTypeIdentifiers
 
@@ -22,13 +21,6 @@ import UniformTypeIdentifiers
             guard !applyingOptions else { return }
             do { try persistOptions(); resetBrowser() }
             catch { applyingOptions = true; websitesEnabled = oldValue; applyingOptions = false; actionError = error.localizedDescription }
-        }
-    }
-    @Published var idleMinutes = 5 {
-        didSet {
-            guard !applyingOptions else { return }
-            do { try persistOptions() }
-            catch { applyingOptions = true; idleMinutes = oldValue; applyingOptions = false; actionError = error.localizedDescription }
         }
     }
     private var timer: Timer?
@@ -83,8 +75,7 @@ import UniformTypeIdentifiers
         backupRepository = RecordingBackups(directory: backupDirectory ?? dataDirectory.deletingLastPathComponent()
             .appendingPathComponent("FocusTrace Backups", isDirectory: true))
         let legacyOptions = TrackingOptions(websitesEnabled: defaults.bool(forKey: "websitesEnabled"),
-            enabledBrowsers: Browser.restoredSelection(saved: defaults.stringArray(forKey: "enabledBrowsers"), legacy: defaults.string(forKey: "browser")),
-            idleMinutes: defaults.object(forKey: "idleMinutes") == nil ? 5 : defaults.integer(forKey: "idleMinutes"))
+            enabledBrowsers: Browser.restoredSelection(saved: defaults.stringArray(forKey: "enabledBrowsers"), legacy: defaults.string(forKey: "browser")))
         do {
             if observesSystem && NSRunningApplication.runningApplications(withBundleIdentifier: "local.jinwoo.FocusTrace")
                 .contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
@@ -157,7 +148,7 @@ import UniformTypeIdentifiers
     }
 
     private var trackingOptions: TrackingOptions {
-        TrackingOptions(websitesEnabled: websitesEnabled, enabledBrowsers: enabledBrowsers, idleMinutes: idleMinutes)
+        TrackingOptions(websitesEnabled: websitesEnabled, enabledBrowsers: enabledBrowsers)
     }
     private func persistOptions() throws {
         guard storageError == nil, !restoring, let recordingWriter else { throw SourceInputError("Tracking settings are temporarily unavailable.") }
@@ -185,24 +176,11 @@ import UniformTypeIdentifiers
         suspensionReasons.remove(reason); previousApp = nil; tick()
     }
 
-    private var isIdle: Bool {
-        // kCGAnyInputEventType is UInt32.max. `.null` means only null events,
-        // and would incorrectly mark an actively used Mac as idle.
-        idleMinutes > 0 && CGEventSource.secondsSinceLastEventType(
-            .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!
-        ) >= Double(idleMinutes * 60)
-    }
-
     private func tick() {
         guard observesSystem, !finishing, running, !suspended, storageError == nil else { return }
         let now = Date()
         coverage.observe(at: now)
         defer { checkAutomaticBackup(at: now) }
-        guard !isIdle else {
-            generation += 1
-            ledger.stop(at: now); status = "Idle"
-            saveIfNeeded(); return
-        }
         let frontmost = NSWorkspace.shared.frontmostApplication
         let app = frontmost?.bundleIdentifier ?? frontmost?.executableURL?.path
         if app != previousApp || frontmost?.processIdentifier != previousProcessIdentifier {
@@ -234,7 +212,7 @@ import UniformTypeIdentifiers
             guard let self else { return }
             self.requestPending = false
             let frontmost = NSWorkspace.shared.frontmostApplication
-            guard self.running, !self.suspended, !self.isIdle,
+            guard self.running, !self.suspended,
                   self.websitesEnabled, self.enabledBrowsers.contains(selected),
                   self.generation == token,
                   target.matches(bundleIdentifier: frontmost?.bundleIdentifier,
@@ -413,7 +391,6 @@ import UniformTypeIdentifiers
         applyingOptions = true
         websitesEnabled = snapshot.options.websitesEnabled
         enabledBrowsers = snapshot.options.enabledBrowsers
-        idleMinutes = snapshot.options.idleMinutes
         applyingOptions = false
         savedVisitCount = ledger.visitCount
         savedCoverageCount = coverage.intervals.count
