@@ -245,20 +245,29 @@ struct OverviewView: View {
             .frame(height: chartHeight)
             .accessibilityLabel((report.period == .year ? "Daily average time by month" : "Time by \(report.period == .day ? "hour" : "day")") + (selectedService.map { ", for \($0.name)" } ?? ", stacked by category"))
             .accessibilityRepresentation {
-                VStack {
-                    ForEach(bins.filter { !$0.isFuture }) { bin in
-                        Button("\(binLabel(bin)), \(bin.seconds.map { overviewTimeLabel($0) + (report.period == .year ? " per day" : "") } ?? "No data")") {
-                            selection = selection == bin.id ? nil : bin.id
-                        }.accessibilityValue((segments[bin.id] ?? []).map {
-                            $0.category.name + ": " + overviewTimeLabel($0.seconds) + (report.period == .year ? " per day" : "")
-                        }.joined(separator: ", "))
-                            .accessibilityHint("Show activity in this interval")
-                    }
-                }
+                chartAccessibility(bins: bins, segments: segments)
             }
             if report.bins.contains(where: { $0.seconds == nil && !$0.isFuture }) {
                 Label("No data", systemImage: "square.dashed")
                     .font(AppType.caption).foregroundStyle(.secondary).padding(.top, 8)
+            }
+        }
+    }
+
+    private func chartAccessibility(bins: [PeriodActivity.Bin],
+                                    segments: [Int: [PeriodActivity.Bin.CategorySegment]]) -> some View {
+        let suffix = report.period == .year ? " per day" : ""
+        return VStack {
+            ForEach(bins.filter { !$0.isFuture }) { bin in
+                let time = bin.seconds.map { overviewTimeLabel($0) + suffix } ?? "No data"
+                let breakdown = (segments[bin.id] ?? []).map { segment in
+                    "\(segment.category.name): \(overviewTimeLabel(segment.seconds))\(suffix)"
+                }.joined(separator: ", ")
+                Button("\(binLabel(bin)), \(time)") {
+                    selection = selection == bin.id ? nil : bin.id
+                }
+                .accessibilityValue(breakdown)
+                .accessibilityHint("Show activity in this interval")
             }
         }
     }

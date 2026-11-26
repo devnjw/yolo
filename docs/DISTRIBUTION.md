@@ -20,7 +20,7 @@ zsh scripts/package.sh
 체크섬은 최종 DMG를 기준으로 생성합니다. 같은 폴더에서 다음으로 확인할 수 있습니다.
 
 ```sh
-shasum -a 256 -c FocusTrace-0.2.1-19-universal.dmg.sha256
+shasum -a 256 -c FocusTrace-0.2.2-20-universal.dmg.sha256
 ```
 
 체크섬은 파일 전송 중 변경 여부를 확인하는 용도이며 보낸 사람의 신원을 인증하지 않습니다.

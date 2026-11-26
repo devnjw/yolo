@@ -4,7 +4,7 @@ Mac에서 사용 중인 모든 전면 앱과 지원 브라우저의 웹사이트
 
 ## 받아서 설치하기
 
-**[최신 버전 다운로드](https://github.com/devnjw/yolo/releases/latest)** · [v0.2.1 설치 파일 바로 받기](https://github.com/devnjw/yolo/releases/download/v0.2.1/FocusTrace-0.2.1-19-universal.dmg)
+**[최신 버전 다운로드](https://github.com/devnjw/yolo/releases/latest)** · [v0.2.2 설치 파일 바로 받기](https://github.com/devnjw/yolo/releases/download/v0.2.2/FocusTrace-0.2.2-20-universal.dmg)
 
 친구에게는 **https://github.com/devnjw/yolo/releases/latest** 링크를 보내세요. GitHub 로그인 없이 Release의 **Assets**에서 `.dmg`를 받을 수 있습니다.
 
@@ -25,7 +25,7 @@ Mac에서 사용 중인 모든 전면 앱과 지원 브라우저의 웹사이트
 zsh scripts/package.sh
 ```
 
-`dist/FocusTrace-0.2.0-18-universal.dmg`와 `.dmg.sha256`이 생성됩니다(이름은 `Info.plist`의 버전·빌드번호를 따릅니다). **DMG 하나를 전달하면 됩니다.** Apple Silicon·Intel 코드를 함께 담고, Applications 바로가기와 설치 안내를 포함합니다. 개인 기록·환경설정·소스 코드는 넣지 않습니다. 공용 앱은 `dist/universal/FocusTrace.app`에 따로 만들어 기존 개발용 앱과 구분합니다. 빌드에 실패하면 이전 앱을 유지합니다.
+`dist/FocusTrace-0.2.2-20-universal.dmg`와 `.dmg.sha256`이 생성됩니다(이름은 `Info.plist`의 버전·빌드번호를 따릅니다). **DMG 하나를 전달하면 됩니다.** Apple Silicon·Intel 코드를 함께 담고, Applications 바로가기와 설치 안내를 포함합니다. 개인 기록·환경설정·소스 코드는 넣지 않습니다. 공용 앱은 `dist/universal/FocusTrace.app`에 따로 만들어 기존 개발용 앱과 구분합니다. 빌드에 실패하면 이전 앱을 유지합니다.
 
 GitHub Actions의 **Build and test**가 성공하면 실행 화면의 **Artifacts → FocusTrace-macOS-universal**에서도 DMG와 체크섬을 받을 수 있습니다. Artifacts는 GitHub 로그인과 저장소 접근 권한이 필요하고 14일간 보관되므로, 친구에게는 공개 [최신 Release](https://github.com/devnjw/yolo/releases/latest) 링크를 공유하세요. CI는 설치 파일을 만들고 보관하며, 공개 Release 게시는 별도로 진행합니다.
 
